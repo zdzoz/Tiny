@@ -4,6 +4,16 @@
 
 #define GET_SRC(str) (TEST_DIR str)
 
+TEST(Tokenizer, Unknown)
+{
+    std::filesystem::path file = GET_SRC("unknown.ty");
+    std::vector<Token> toks;
+    ASSERT_TRUE(Token::tokenize(file, toks));
+
+    EXPECT_EQ(toks.size(), 1);
+    EXPECT_EQ(toks[0].type(), TokenType::UNKNOWN) << "Expected unknown token";
+}
+
 TEST(Tokenizer, Basic)
 {
     std::filesystem::path file = GET_SRC("basic.ty");

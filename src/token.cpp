@@ -90,7 +90,7 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
             if (isdigit(c)) {
                 u64 num = c - '0';
                 while (isdigit(f.peek())) {
-                    c = f.get();
+                    f.get(c);
                     num = num * 10 + (c - '0');
                 }
                 type = TokenType::NUM;
@@ -99,7 +99,7 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
             } else if (isalpha(c)) {
                 id += c;
                 while (isalnum(f.peek())) {
-                    c = f.get();
+                    f.get(c);
                     id += c;
                 }
 
@@ -133,18 +133,13 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
                     save_id = true;
                 }
             } else {
-                TODO("UNKNOWN");
+                do {
+                    id += c;
+                    c = f.peek();
+                } while (!isspace(c) && f.get());
+
+                type = TokenType::UNKNOWN;
                 save_id = true;
-                // const char* temp = str;
-                // int count = 0;
-                // while (!isspace(*temp) && *temp != 0) {
-                //     count++;
-                //     temp++;
-                // }
-                // tok->str = (char*)malloc(sizeof(char) * count + 1);
-                // strncpy(tok->str, str, count + 1);
-                // tok->str[count] = '\0';
-                // str += count - 1;
             }
         }
 
@@ -161,7 +156,7 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
 static u64 get_id(const std::string& id)
 {
     static u64 __func_id = 0;
-    static std::unordered_map<std::string, u64> __func_map = {{"InputNum", __func_id++}, {"OutputNum", __func_id++}, {"OutputNewLine", __func_id++}};
+    static std::unordered_map<std::string, u64> __func_map = { { "InputNum", __func_id++ }, { "OutputNum", __func_id++ }, { "OutputNewLine", __func_id++ } };
 
     if (__func_map.find(id) != __func_map.end()) {
         return __func_map.at(id);

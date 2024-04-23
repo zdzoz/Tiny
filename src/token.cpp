@@ -25,6 +25,11 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
 
     f.open(file.c_str(), std::ifstream::in);
 
+    if (f.fail()) {
+        f.close();
+        return false;
+    }
+
     char c;
     while (f.get(c)) {
         if (isspace(c))
@@ -148,9 +153,6 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
         else
             toks.emplace_back(type, val);
     }
-#if !defined(NDEBUG) || SHOW_LOGS == 1
-    PRINT_TOKENS(std::cerr, toks);
-#endif
 
     f.close();
     return true;

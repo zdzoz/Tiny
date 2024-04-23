@@ -6,8 +6,6 @@
 #include <unordered_map>
 #include <vector>
 
-#define SHOW_LOGS 0
-
 #define TODO(msg) throw std::runtime_error("TODO: " msg)
 
 typedef uint8_t u8;

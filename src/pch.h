@@ -1,12 +1,23 @@
 #include <cinttypes>
-#include <exception>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-#define TODO(msg) throw std::runtime_error("TODO: " msg)
+
+
+#define LOG_ERROR(...) (fprintf(stderr, __VA_ARGS__))
+#define LOG_WARN(...) (fprintf(stdout,  __VA_ARGS__))
+
+#define INFO(...) (fprintf(stdout, "Info: " __VA_ARGS__))
+#define WARN(...) (LOG_WARN("Warning: " __VA_ARGS__))
+#define TODO(...)                               \
+    do {                                        \
+        fprintf(stderr, "[TODO] " __VA_ARGS__); \
+    } while (0)
 
 typedef uint8_t u8;
 typedef uint16_t u16;

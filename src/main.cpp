@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "token.h"
+#include "parser.h"
 
 #define USAGE_MSG "USAGE: tc <file>"
 
@@ -11,11 +12,25 @@ int main(int argc, char** argv) {
     }
 
     std::filesystem::path file = argv[1];
-    std::vector<Token> toks;
-    if (!Token::tokenize(file, toks)) {
+    TokenList toks;
+    if (!toks.tokenize(file)) {
         std::cerr << "Failed to open file: " << file << std::endl;
         return 1;
     }
+
+    #ifndef NDEBUG
+    toks.show();
+    std::cerr << "\n";
+    #endif
+
+    Parser p(std::move(toks));
+    int errors = p.parse();
+    if (errors > 0) {
+        std::cerr << "[PARSER] Failed with " << errors << " errors" << std::endl;
+        return 1;
+    }
+
+    std::cout << p.get_ssa() << std::endl;
 
     return 0;
 }

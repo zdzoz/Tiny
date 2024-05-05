@@ -11,12 +11,12 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(tc_tests
+add_executable(ty_tests
   test_tokenizer.cpp
 )
 
-target_compile_definitions(tc_tests PRIVATE TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_srcs/")
-target_link_libraries(tc_tests GTest::gtest_main tc_lib)
+target_compile_definitions(ty_tests PRIVATE TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/")
+target_link_libraries(ty_tests GTest::gtest_main ty_lib)
 
 include(GoogleTest)
-gtest_discover_tests(tc_tests)
+gtest_discover_tests(ty_tests)

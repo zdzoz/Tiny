@@ -1,9 +1,11 @@
-add_library(tc_lib
+add_library(ty_lib
     token.cpp token.h
+    parser.cpp parser.h
+    ssa.cpp ssa.h
 )
 
-target_include_directories(tc_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_precompile_headers(tc_lib PUBLIC pch.h)
+target_include_directories(ty_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_precompile_headers(ty_lib PUBLIC pch.h)
 
-add_executable(tc main.cpp)
-target_link_libraries(tc tc_lib)
+add_executable(ty main.cpp)
+target_link_libraries(ty ty_lib)

@@ -7,18 +7,18 @@
 TEST(Tokenizer, Unknown)
 {
     std::filesystem::path file = GET_SRC("unknown.ty");
-    std::vector<Token> toks;
-    ASSERT_TRUE(Token::tokenize(file, toks));
+    TokenList toks;
+    ASSERT_TRUE(toks.tokenize(file));
 
     EXPECT_EQ(toks.size(), 1);
-    EXPECT_EQ(toks[0].type(), TokenType::UNKNOWN) << "Expected unknown token";
+    EXPECT_EQ(toks.get_type(), TokenType::UNKNOWN) << "Expected unknown token";
 }
 
 TEST(Tokenizer, Basic)
 {
     std::filesystem::path file = GET_SRC("basic.ty");
-    std::vector<Token> toks;
-    ASSERT_TRUE(Token::tokenize(file, toks));
+    TokenList toks;
+    ASSERT_TRUE(toks.tokenize(file));
 
     std::vector<TokenType> val = {
         TokenType::MAIN,
@@ -108,6 +108,7 @@ TEST(Tokenizer, Basic)
     ASSERT_EQ(toks.size(), val.size()) << "Expected vectors to be of equal size";
 
     for (size_t i = 0; i < toks.size(); i++) {
-        EXPECT_EQ(toks[i].type(), val[i]) << "Token types differ";
+        EXPECT_EQ(toks.get_type(), val[i]) << "Token types differ";
+        toks.eat();
     }
 }

@@ -4,6 +4,11 @@
 #include <fstream>
 #include <iostream>
 
+Token::Token()
+    : _type(TokenType::UNKNOWN)
+{
+}
+
 Token::Token(TokenType type, std::optional<u64> val)
     : _type(type)
     , _val(val)
@@ -18,7 +23,7 @@ Token::Token(TokenType type, std::optional<u64> val, std::string&& id)
 }
 
 static u64 get_id(const std::string& id);
-bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
+bool TokenList::tokenize(std::filesystem::path file)
 {
     assert(TOKEN_TYPE_COUNT == token_str.size());
     std::ifstream f;
@@ -50,6 +55,12 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
             type = TokenType::MUL;
             break;
         case '/':
+            if (f.peek() == '/') {
+                while (c != '\n') {
+                    f.get(c);
+                }
+                continue;
+            }
             type = TokenType::DIV;
             break;
         case '.':
@@ -76,9 +87,18 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
         case '>':
             type = TokenType::GT;
             break;
+        case '=': {
+            switch (f.peek()) {
+            case '=':
+                type = TokenType::EQ;
+                f.get();
+                break;
+            default:
+                break;
+            }
+        } break;
         case '<': {
-            char next = f.peek();
-            if (next == '-') {
+            if (f.peek() == '-') {
                 type = TokenType::ASSIGN;
                 f.get();
                 break;
@@ -151,6 +171,18 @@ bool Token::tokenize(std::filesystem::path file, std::vector<Token>& toks)
 
     f.close();
     return true;
+}
+
+void TokenList::show()
+{
+    uint32_t i = 0;
+    std::cerr << '[';
+    for (const auto& e : toks) {
+        std::cerr << e;
+        if (++i != toks.size())
+            std::cerr << ", ";
+    }
+    std::cerr << "]\n";
 }
 
 static u64 get_id(const std::string& id)

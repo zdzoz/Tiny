@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(tc VERSION 0.0.1 LANGUAGES C CXX)
+project(tiny VERSION 0.0.1 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)

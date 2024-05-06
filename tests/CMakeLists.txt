@@ -15,7 +15,9 @@ add_executable(ty_tests
   test_tokenizer.cpp
 )
 
-target_compile_definitions(ty_tests PRIVATE TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/")
+target_compile_definitions(ty_tests PRIVATE BASIC_TESTS="${CMAKE_CURRENT_SOURCE_DIR}/basic_tests/")
+target_compile_definitions(ty_tests PRIVATE INTERMEDIATE_TESTS="${CMAKE_CURRENT_SOURCE_DIR}/intermediate_tests/")
+target_compile_definitions(ty_tests PRIVATE COMPLEX_TESTS="${CMAKE_CURRENT_SOURCE_DIR}/complex_tests/")
 target_link_libraries(ty_tests GTest::gtest_main ty_lib)
 
 include(GoogleTest)

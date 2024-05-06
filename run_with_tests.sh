@@ -4,9 +4,14 @@
 
 export GTEST_COLOR=1
 
-FILE="tests/src/check_inbuilt.ty"
-
 CWD=$(pwd)
+FILE="tests/basic_tests/check_inbuilt.ty"
+
+if [ ! -f "$CWD/$FILE" ]; then
+    echo "failed to find file: $FILE"
+    exit 1
+fi
+
 RES="$(ctest --test-dir build/tests --output-on-failure -j)\n"
 if [ $? -eq 0 ]; then
     echo "$($CWD/build/bin/ty "$FILE")"

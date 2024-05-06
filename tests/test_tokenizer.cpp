@@ -1,22 +1,40 @@
-#include <gtest/gtest.h>
-
+#include "test_common.h"
 #include "token.h"
-
-#define GET_SRC(str) (TEST_DIR str)
 
 TEST(Tokenizer, Unknown)
 {
-    std::filesystem::path file = GET_SRC("unknown.ty");
+    std::string s = "&dss";
     TokenList toks;
-    ASSERT_TRUE(toks.tokenize(file));
+    ASSERT_TRUE(toks.tokenize(s));
 
     EXPECT_EQ(toks.size(), 1);
     EXPECT_EQ(toks.get_type(), TokenType::UNKNOWN) << "Expected unknown token";
 }
 
+TEST(Tokenizer, temp)
+{
+    std::string s = "main var x; {let x <- 10 }.";
+    TokenList toks;
+    ASSERT_TRUE(toks.tokenize(s));
+
+    EXPECT_EQ(toks.size(), 11);
+    EXPECT_EQ(toks.get_type(), TokenType::MAIN);
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::PERIOD);
+}
+
 TEST(Tokenizer, Basic)
 {
-    std::filesystem::path file = GET_SRC("basic.ty");
+    std::filesystem::path file = GET_INTERMEDIATE("prof_basic.ty");
     TokenList toks;
     ASSERT_TRUE(toks.tokenize(file));
 

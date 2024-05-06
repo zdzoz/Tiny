@@ -23,20 +23,12 @@ Token::Token(TokenType type, std::optional<u64> val, std::string&& id)
 }
 
 static u64 get_id(const std::string& id);
-bool TokenList::tokenize(std::filesystem::path file)
+bool TokenList::__tokenize(std::istream& is)
 {
     assert(TOKEN_TYPE_COUNT == token_str.size());
-    std::ifstream f;
-
-    f.open(file.c_str(), std::ifstream::in);
-
-    if (f.fail()) {
-        f.close();
-        return false;
-    }
 
     char c;
-    while (f.get(c)) {
+    while (is.get(c)) {
         if (isspace(c))
             continue;
 
@@ -55,9 +47,9 @@ bool TokenList::tokenize(std::filesystem::path file)
             type = TokenType::MUL;
             break;
         case '/':
-            if (f.peek() == '/') {
+            if (is.peek() == '/') {
                 while (c != '\n') {
-                    f.get(c);
+                    is.get(c);
                 }
                 continue;
             }
@@ -88,19 +80,19 @@ bool TokenList::tokenize(std::filesystem::path file)
             type = TokenType::GT;
             break;
         case '=': {
-            switch (f.peek()) {
+            switch (is.peek()) {
             case '=':
                 type = TokenType::EQ;
-                f.get();
+                is.get();
                 break;
             default:
                 break;
             }
         } break;
         case '<': {
-            if (f.peek() == '-') {
+            if (is.peek() == '-') {
                 type = TokenType::ASSIGN;
-                f.get();
+                is.get();
                 break;
             }
             type = TokenType::LT;
@@ -109,8 +101,8 @@ bool TokenList::tokenize(std::filesystem::path file)
         default:
             if (isdigit(c)) {
                 u64 num = c - '0';
-                while (isdigit(f.peek())) {
-                    f.get(c);
+                while (isdigit(is.peek())) {
+                    is.get(c);
                     num = num * 10 + (c - '0');
                 }
                 type = TokenType::NUM;
@@ -118,8 +110,8 @@ bool TokenList::tokenize(std::filesystem::path file)
                 break;
             } else if (isalpha(c)) {
                 id += c;
-                while (isalnum(f.peek())) {
-                    f.get(c);
+                while (isalnum(is.peek())) {
+                    is.get(c);
                     id += c;
                 }
 
@@ -155,8 +147,8 @@ bool TokenList::tokenize(std::filesystem::path file)
             } else {
                 do {
                     id += c;
-                    c = f.peek();
-                } while (!isspace(c) && f.get());
+                    c = is.peek();
+                } while (!isspace(c) && c != EOF && is.get());
 
                 type = TokenType::UNKNOWN;
                 save_id = true;
@@ -169,8 +161,31 @@ bool TokenList::tokenize(std::filesystem::path file)
             toks.emplace_back(type, val);
     }
 
-    f.close();
     return true;
+}
+
+bool TokenList::tokenize(std::filesystem::path file)
+{
+    std::ifstream f;
+
+    f.open(file.c_str(), std::ifstream::in);
+
+    if (f.fail()) {
+        f.close();
+        return false;
+    }
+
+    bool res = __tokenize(f);
+
+    f.close();
+    return res;
+}
+
+bool TokenList::tokenize(const std::string& str)
+{
+    std::stringstream ss(str);
+
+    return __tokenize(ss);
 }
 
 void TokenList::show()

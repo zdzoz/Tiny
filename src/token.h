@@ -144,10 +144,11 @@ public:
 
 class TokenList {
     std::vector<Token> toks;
-    uint64_t index;
+    uint64_t index = 0;
 
 public:
     bool tokenize(std::filesystem::path file);
+    bool tokenize(const std::string& str);
     void show();
     inline size_t size() const { return toks.size(); }
     inline size_t remaining() const { return toks.size() - index; }
@@ -172,4 +173,6 @@ public:
     //     if (index >= toks.size()) return {};
     //     return &toks[index];
     // }
+private:
+    bool __tokenize(std::istream& os);
 };

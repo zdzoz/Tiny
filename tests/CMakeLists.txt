@@ -13,7 +13,13 @@ enable_testing()
 
 add_executable(ty_tests
   test_tokenizer.cpp
+  test_parser_basic.cpp
+  test_parser_intermediate.cpp
+  test_parser_complex.cpp
 )
+target_compile_definitions(ty_tests PRIVATE BASIC=1)
+target_compile_definitions(ty_tests PRIVATE INTERMEDIATE=0)
+target_compile_definitions(ty_tests PRIVATE COMPLEX=0)
 
 target_compile_definitions(ty_tests PRIVATE BASIC_TESTS="${CMAKE_CURRENT_SOURCE_DIR}/basic_tests/")
 target_compile_definitions(ty_tests PRIVATE INTERMEDIATE_TESTS="${CMAKE_CURRENT_SOURCE_DIR}/intermediate_tests/")

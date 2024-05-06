@@ -1,5 +1,4 @@
 #include "parser.h"
-#include <iostream>
 
 #define SYN_ERROR(...)                            \
     do {                                          \

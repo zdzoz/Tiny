@@ -11,7 +11,7 @@ TEST(Tokenizer, Unknown)
     EXPECT_EQ(toks.get_type(), TokenType::UNKNOWN) << "Expected unknown token";
 }
 
-TEST(Tokenizer, temp)
+TEST(Tokenizer, Let)
 {
     std::string s = "main var x; {let x <- 10 }.";
     TokenList toks;

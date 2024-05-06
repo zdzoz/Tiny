@@ -27,8 +27,8 @@ private:
     void whileStatement();
     void returnStatement();
 
-    void factor();
-    void term();
     void expression();
+    void term();
+    void factor();
     void relation();
 };

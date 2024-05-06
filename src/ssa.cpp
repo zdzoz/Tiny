@@ -1,98 +1,204 @@
 #include "ssa.h"
 
+#include <iostream>
 #include <ostream>
 
 u64 Block::__id = 0;
 u64 SSA::instruction_num = 0;
 
+SSA::SSA()
+    : blocks(std::make_shared<Block>())
+    , current(blocks)
+{
+    add_block(true);
+}
+
+void SSA::add_block(bool isLeft)
+{
+    auto p = current;
+    current = std::make_shared<Block>();
+    current->parent = p;
+    if (isLeft) {
+        p->left = current;
+        INFO("Created BB%llu\n", blocks->left->block_id);
+    } else {
+        p->right = current;
+        INFO("Created BB%llu\n", blocks->right->block_id);
+    }
+}
+
 void SSA::add_const(u64 val)
 {
-    static std::unordered_set<u64> consts;
-    if (consts.find(val) != consts.end())
+    static std::unordered_map<u64, u64> val_to_pos;
+    if (val_to_pos.find(val) != val_to_pos.end()) {
+        // last_instr_pos = val_to_pos[val];
+        options.push(val_to_pos[val]);
         return;
-
-    consts.insert(val);
+    }
 
     Instr instr;
     instr.type = InstrType::CONST;
     instr.x = val;
-    instr.id = instruction_num++;
+    instr.pos = instruction_num++;
+    last_instr_pos = instr.pos;
+    val_to_pos[val] = instr.pos;
+
     blocks->add(std::move(instr));
+    options.push(val);
 }
 
+// FIX: add_instr
 void SSA::add_instr(InstrType type)
 {
     Instr instr;
     instr.type = type;
-    instructions.emplace(std::move(instr));
+    switch (type) {
+    case InstrType::ADD: // add x y addition
+    case InstrType::SUB: // sub x y subtraction
+    case InstrType::MUL: // mul x y multiplication
+    case InstrType::DIV: // div x y division
+    case InstrType::CMP: // cmp x y comparison
+    case InstrType::BNE: // bne x y branch to y on x not equal
+    case InstrType::BEQ: // beq x y branch to y on x equal
+    case InstrType::BLE: // ble x y branch to y on x less or equal
+    case InstrType::BLT: // blt x y branch to y on x less
+    case InstrType::BGE: // bge x y branch to y on x greater or equal
+    case InstrType::BGT: { // bgt x y branch to y on x greater
+        assert(options.size() >= 2 && "Not enough options");
+        instr.y = options.top();
+        options.pop();
+        instr.x = options.top();
+        options.pop();
+    } break;
+    case InstrType::READ: // no opts
+        break;
+    case InstrType::WRITE: {
+        instr.x = options.top();
+        options.pop();
+    } break;
+    case InstrType::WRITENL: // no opts
+        break;
+    case InstrType::BRA: // bra y branch to y
+    case InstrType::PHI: // phi x1 x2 compute Phi(x1,    x2)
+    default:
+        ERROR("Unknown InstrType\n");
+        exit(1);
+    }
+    add_to_block(std::move(instr));
 }
 
-Instr& SSA::get_curr()
+void SSA::add_to_block(Instr&& instr)
 {
-    return instructions.top();
+    instr.pos = instruction_num++;
+    last_instr_pos = instr.pos;
+    current->add(std::move(instr));
 }
 
-void SSA::add_symbols(const std::vector<u64>& s)
+void SSA::add_symbols(u64 count)
 {
-    symbol_table.reserve(symbol_table.size() + s.size());
-    symbol_table.insert(symbol_table.end(), s.begin(), s.end());
+    symbol_table.resize(symbol_table.size() + count);
     INFO("symbol_table size %zu\n", symbol_table.size());
 }
 
-// FIX: set_symbol
-void SSA::set_symbol(Token* t)
+void SSA::set_symbol(const Token* t, u64 pos)
 {
-    if (*t->val() > symbol_table.size()) {
+    if (*t->val() >= symbol_table.size()) {
         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
         exit(1);
     }
 
-    symbol_table[*t->val()] = 0;
+    INFO("Setting %s = %llu\n", t->id().c_str(), pos);
+    symbol_table[*t->val()] = pos;
 }
 
-u64 SSA::get_symbol(Token* t)
+// void SSA::resolve_symbol(const Token* t)
+// {
+//     if (*t->val() >= symbol_table.size()) {
+//         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
+//         exit(1);
+//     }
+//
+//     switch (symbol_table[*t->val()].value()) {
+//     case FUNC_INPUT_NUM:
+//         add_instr(InstrType::READ);
+//         return;
+//     case FUNC_OUTPUT_NUM:
+//         add_instr(InstrType::WRITE);
+//         return;
+//     case FUNC_OUTPUT_NL:
+//         add_instr(InstrType::WRITE);
+//         return;
+//     default:
+//         TODO("FIX: user defined functions (%s)\n", __func__);
+//         exit(1);
+//     }
+// }
+
+// resolves symbol and adds to option stack
+bool SSA::resolve_symbol(const Token* t)
 {
-    if (*t->val() > symbol_table.size()) {
+    if (*t->val() >= symbol_table.size()) {
         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
         exit(1);
     }
 
-    return symbol_table[*t->val()].value_or([&]() {
-        WARN("Uninitialized symbol '%s'", t->id().c_str());
-        return 0;
-    }());
+    u64 opt = 0;
+    switch (*t->val()) {
+    case FUNC_INPUT_NUM: // no opt
+        add_instr(InstrType::READ);
+        return false;
+    case FUNC_OUTPUT_NUM: // has opt
+        add_instr(InstrType::WRITE);
+        return false;
+    case FUNC_OUTPUT_NL: // no opt
+        add_instr(InstrType::WRITENL);
+        return false;
+    default:
+        if (symbol_table[*t->val()].has_value()) {
+        } else {
+            add_const(0);
+            symbol_table[*t->val()] = 0;
+            WARN("uninitialized symbol '%s'\n", t->id().c_str());
+        }
+        opt = *symbol_table[*t->val()];
+    }
+    options.push(opt);
+    return true;
 }
 
 /// PRINTS
 
-// TODO: write print
+void SSA::print_symbol_table()
+{
+    std::cerr << "Symbol Table:" << std::endl;
+    u64 i = 0;
+    for (const auto& e : symbol_table) {
+        if (e)
+            std::cerr << "\t" << i << ": " << *e << std::endl;
+        else
+            std::cerr << "\t" << i << ": Unset" << std::endl;
+        i++;
+    }
+    std::cerr << std::endl;
+}
+
+// TODO: check if print works correctly
 std::ostream& operator<<(std::ostream& os, const SSA& ssa)
 {
-    TODO("Implement SSA %s\n", __func__);
-    const auto& b = ssa.blocks;
+    // └┐├─│
+    std::function<void(Block*, u32)> p_blocks = [&os, &p_blocks](const Block* const block, u32 indent) -> void {
+        os << std::string(indent, ' ') << (indent ? "├ " : "") << "BB" << block->get_block_id() << std::endl;
+        block->print_with_indent(os, indent);
 
-    u32 indent = 0;
-    os << "BB" << b->get_block_id() << std::endl;
-    b->print_with_indent(os, indent);
-    // "\n └──┐\n";
+        if (block->right || block->left)
+            os << "└───────────┐" << std::endl;
+        if (block->left)
+            p_blocks(block->left.get(), indent + 12);
+        if (block->right)
+            p_blocks(block->right.get(), indent + 12);
+    };
+    p_blocks(ssa.blocks.get(), 0);
 
-    // horizontal print?
-    // void printBT(const std::string& prefix, const BSTNode* node, bool isLeft)
-    // {
-    //     if( node != nullptr )
-    //     {
-    //         std::cout << prefix;
-    //
-    //         std::cout << (isLeft ? "├──" : "└──" );
-    //
-    //         // print the value of the node
-    //         std::cout << node->m_val << std::endl;
-    //
-    //         // enter the next tree level - left and right branch
-    //         printBT( prefix + (isLeft ? "│   " : "    "), node->m_left, true);
-    //         printBT( prefix + (isLeft ? "│   " : "    "), node->m_right, false);
-    //     }
-    // }
     return os;
 }
 
@@ -121,7 +227,7 @@ std::ostream& operator<<(std::ostream& os, const Instr& instr)
         os << " (" << instr.x << ") (" << instr.y << ")";
     };
 
-    os << instr.id << ": ";
+    os << instr.pos << ": ";
     switch (instr.type) {
     case InstrType::ADD:
         os << "add";
@@ -180,6 +286,15 @@ std::ostream& operator<<(std::ostream& os, const Instr& instr)
         break;
     case InstrType::CONST:
         os << "const #" << instr.x;
+        break;
+    case InstrType::WRITE:
+        os << "write " << instr.x;
+        break;
+    case InstrType::WRITENL:
+        os << "writeNL";
+        break;
+    case InstrType::READ:
+        os << "read";
         break;
     default:
         break;

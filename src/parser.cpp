@@ -74,9 +74,11 @@ void Parser::varDecl()
     // eat var
     toks.eat();
 
-    std::vector<u64> symbols;
+    // std::vector<u64> symbols;
+    u64 num_symbols = 0;
     while (toks.get_type() == TokenType::ID) {
-        symbols.push_back(*toks.get()->val());
+        // symbols.push_back(*toks.get()->val());
+        num_symbols++;
         // eat id
         toks.eat();
 
@@ -88,7 +90,7 @@ void Parser::varDecl()
         }
         toks.eat();
     }
-    ssa.add_symbols(symbols);
+    ssa.add_symbols(num_symbols);
 
     if (toks.get_type() != TokenType::SEMI) {
         SYN_EXPECTED("SEMI");
@@ -127,19 +129,14 @@ void Parser::statement()
     case TokenType::RET:
         returnStatement();
         break;
-    case TokenType::SEMI:
-        toks.eat();
-        break;
     default:
-        SYN_ERROR("Unexpected Token -> ");
-        PRTOKLN(*toks.get());
         break;
     }
 }
 
 /// STATEMENTS ///
 
-// FIX: assignment = “let” ident “<-” expression
+// assignment = “let” ident “<-” expression
 void Parser::assignment()
 {
     // let
@@ -161,7 +158,9 @@ void Parser::assignment()
     toks.eat();
 
     expression();
-    // TODO: update symbol_table with instruction position
+    ssa.set_symbol(tok, ssa.get_last_pos());
+    // std::cout << ssa;
+    // while(1);
 }
 
 // FIX: funcCall = “call” ident [2 “(“ [expression { “,” expression } ] “)” ]
@@ -172,6 +171,7 @@ void Parser::funcCall()
     if (toks.get_type() != TokenType::ID) {
         SYN_EXPECTED("ID");
     }
+    auto val = toks.get();
     toks.eat(); // ID
 
     if (toks.get_type() == TokenType::LPAREN) {
@@ -181,7 +181,7 @@ void Parser::funcCall()
         do {
             expression();
             if (toks.get_type() == TokenType::COMMA) {
-                toks.eat();
+                toks.eat(); // COMMA
                 if (toks.get_type() == TokenType::RPAREN) {
                     SYN_EXPECTED("Expression");
                     return;
@@ -191,8 +191,11 @@ void Parser::funcCall()
         toks.eat(); // RPAREN
     }
 
-    u64 id = *toks.get()->val();
-    // TODO: resolve function
+    // FIX: resolve function
+    if (ssa.resolve_symbol(val)) {
+        // USER DEFINED FUNCTION
+        // ssa.add_instr(); // TODO: Jump
+    }
 }
 
 // FIX: if = “if” relation “then” statSequence [ “else” statSequence ] “fi”
@@ -262,12 +265,12 @@ void Parser::expression()
         case TokenType::PLUS:
             toks.eat();
             term();
-            // ssa.add_to_block(InstrType::ADD);
+            ssa.add_instr(InstrType::ADD);
             break;
         case TokenType::MIN:
             toks.eat();
             term();
-            // ssa.add_to_block(InstrType::SUB);
+            ssa.add_instr(InstrType::SUB);
             break;
         default:
             loop = false;
@@ -286,12 +289,12 @@ void Parser::term()
         case TokenType::MUL:
             toks.eat();
             factor();
-            // ssa.add_to_block(InstrType::MUL);
+            ssa.add_instr(InstrType::MUL);
             break;
         case TokenType::DIV:
             toks.eat();
             factor();
-            // ssa.add_to_block(InstrType::DIV);
+            ssa.add_instr(InstrType::DIV);
             break;
         default:
             loop = false;
@@ -305,7 +308,7 @@ void Parser::factor()
 {
     switch (toks.get_type()) {
     case TokenType::ID:
-        // TODO: resolve and add to ssa
+        ssa.resolve_symbol(toks.get());
         toks.eat();
         break;
     case TokenType::NUM:

@@ -1,4 +1,6 @@
+#include <cassert>
 #include <cinttypes>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -7,13 +9,12 @@
 #include <unordered_set>
 #include <vector>
 
-
-
 #define LOG_ERROR(...) (fprintf(stderr, __VA_ARGS__))
-#define LOG_WARN(...) (fprintf(stdout,  __VA_ARGS__))
+#define LOG_WARN(...) (fprintf(stdout, __VA_ARGS__))
 
 #define INFO(...) (fprintf(stdout, "Info: " __VA_ARGS__))
 #define WARN(...) (LOG_WARN("Warning: " __VA_ARGS__))
+#define ERROR(...) (LOG_ERROR("Error: " __VA_ARGS__))
 #define TODO(...)                               \
     do {                                        \
         fprintf(stderr, "[TODO] " __VA_ARGS__); \

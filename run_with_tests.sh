@@ -4,7 +4,7 @@
 
 export GTEST_COLOR=1
 
-FILE="tests/src/just_add.ty"
+FILE="tests/src/check_inbuilt.ty"
 
 CWD=$(pwd)
 RES="$(ctest --test-dir build/tests --output-on-failure -j)\n"

@@ -1,8 +1,16 @@
 #pragma once
 
 #include <stack>
+#ifndef NDEBUG
+#include <iostream>
+#endif
 
 #include "token.h"
+
+// InputNum, OutputNum, OutputNewLine
+#define FUNC_INPUT_NUM 0
+#define FUNC_OUTPUT_NUM 1
+#define FUNC_OUTPUT_NL 2
 
 enum class InstrType {
     CONST, // const #x define an SSA value for a constant
@@ -30,25 +38,29 @@ enum class InstrType {
 };
 
 struct Instr {
-    u64 id;
+    u64 pos;
     InstrType type;
     u64 x, y;
     friend std::ostream& operator<<(std::ostream& os, const Instr& instr);
 };
 
+class SSA;
 class Block {
     static u64 __id;
     u64 block_id;
 
+    friend SSA;
+
 public:
-    std::unique_ptr<Block> left, right, parent;
+    // NOTE: maybe add sibling property?
+    std::shared_ptr<Block> left, right, parent;
 
     Block()
         : block_id(__id++)
     {
     }
 
-    inline u64 get_block_id() { return block_id; }
+    inline u64 get_block_id() const { return block_id; }
 
     inline void add(Instr&& instr)
     {
@@ -64,24 +76,39 @@ private:
 
 class SSA {
 public:
-    SSA()
-        : blocks(std::make_unique<Block>()) {};
+    SSA();
+
+#ifndef NDEBUG
+    ~SSA()
+    {
+        print_symbol_table();
+    }
+#endif
+
+    void add_block(bool isLeft);
 
     void add_const(u64 val);
     void add_instr(InstrType type);
-    Instr& get_curr();
 
-    void add_symbols(const std::vector<u64>& s);
-    void set_symbol(Token* t);
-    u64 get_symbol(Token* t);
+    void add_symbols(u64 count);
+    void set_symbol(const Token* t, u64 pos);
+
+    bool resolve_symbol(const Token* t);
+    void print_symbol_table();
+
+    inline u64 get_last_pos() const { return last_instr_pos; }
 
 private:
-    std::stack<Instr> instructions;
+    std::stack<u64> options;
+    u64 last_instr_pos;
 
-    // "InputNum", "OutputNum", "OutputNewLine" ?
-    std::vector<std::optional<u64>> symbol_table = { 0, 0, 0};
+    // InputNum, OutputNum, OutputNewLine
+    std::vector<std::optional<u64>> symbol_table = { 0, 0, 0 };
+
+    void add_to_block(Instr&& instr);
 
     static u64 instruction_num;
-    std::unique_ptr<Block> blocks;
+    std::shared_ptr<Block> blocks; // head
+    std::shared_ptr<Block> current;
     friend std::ostream& operator<<(std::ostream& os, const SSA& ssa);
 };

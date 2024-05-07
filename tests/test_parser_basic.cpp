@@ -4,9 +4,9 @@
 #include "parser.h"
 
 std::vector<std::filesystem::path> getFiles(std::string folder);
-class BasicParserTestSuite : public testing::TestWithParam<std::filesystem::path> { };
+class BasicParserTest : public testing::TestWithParam<std::filesystem::path> { };
 
-TEST_P(BasicParserTestSuite, Files)
+TEST_P(BasicParserTest, Files)
 {
     TokenList toks;
     ASSERT_TRUE(toks.tokenize(GetParam()));
@@ -17,7 +17,28 @@ TEST_P(BasicParserTestSuite, Files)
     EXPECT_EQ(errors, 0);
 }
 
-INSTANTIATE_TEST_SUITE_P(ParserSuite, BasicParserTestSuite, testing::ValuesIn(getFiles(BASIC_TESTS)));
+TEST(BasicParserTest, Multiply) {
+
+    std::string s = R"(
+        main
+        var x, y; {
+            let x <- 2;
+            let y <- 4;
+            let x <- x * y;
+            call OutputNum(x)
+        }.
+    )";
+
+    TokenList toks;
+    ASSERT_TRUE(toks.tokenize(s));
+
+    Parser p(std::move(toks));
+    int errors = p.parse();
+
+    EXPECT_EQ(errors, 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(BasicParserSuite, BasicParserTest, testing::ValuesIn(getFiles(BASIC_TESTS)));
 
 std::vector<std::filesystem::path> getFiles(std::string folder)
 {

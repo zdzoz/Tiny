@@ -2,13 +2,21 @@ main
 var x; {
     let x <- call InputNum();
     if x == 1 then
-        let x <- 1
+        let x <- 1;
+        let x <- x + x
     else
-        let x <- 2
+        let x <- 2;
+        let x <- x + 4
     fi;
     call OutputNum(x)
 }.
 
 // Output SSA
-// BB0 | 0: const#1
-// BB1 | 1: add (0) (0)
+// BB0 | 1: const #1
+// BB0 | ?: const #2
+// BB1 | 0: read
+// BB1 |
+// BB1 |
+// BB1 |
+// BB1 |
+// BB1 |

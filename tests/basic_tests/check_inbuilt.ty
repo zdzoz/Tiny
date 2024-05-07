@@ -5,3 +5,9 @@ var x; {
     call OutputNum(x);
     call OutputNewLine();
 }.
+
+// BB0 | 1: const #1
+// BB1 | 0: read
+// BB1 | 2: add (0) (1)
+// BB1 | 3: write 2
+// BB1 | 4: writeNL

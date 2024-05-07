@@ -73,13 +73,11 @@ void Parser::varDecl()
     // eat var
     toks.eat();
 
-    // std::vector<u64> symbols;
-    u64 num_symbols = 0;
+    SymbolTableType symbols;
+    // u64 num_symbols = 0;
     while (toks.get_type() == TokenType::ID) {
-        // symbols.push_back(*toks.get()->val());
-        num_symbols++;
-        // eat id
-        toks.eat();
+        symbols.push_back({ toks.get()->id(), {} });
+        toks.eat(); // eat id
 
         TokenType typ = toks.get_type();
         if (typ != TokenType::COMMA) {
@@ -89,7 +87,7 @@ void Parser::varDecl()
         }
         toks.eat();
     }
-    ssa.add_symbols(num_symbols);
+    ssa.add_symbols(std::move(symbols));
 
     if (toks.get_type() != TokenType::SEMI) {
         SYN_EXPECTED("SEMI");
@@ -118,6 +116,7 @@ void Parser::statement()
         break;
     case TokenType::CALL:
         funcCall();
+        ssa.clear_stack();
         break;
     case TokenType::IF:
         ifStatement();
@@ -157,12 +156,11 @@ void Parser::assignment()
     toks.eat();
 
     expression();
-    ssa.set_symbol(tok, ssa.get_last_pos());
-    // std::cout << ssa;
-    // while(1);
+    // ssa.set_symbol(tok, ssa.get_last_pos());
+    ssa.set_symbol(tok);
 }
 
-// FIX: funcCall = “call” ident [2 “(“ [expression { “,” expression } ] “)” ]
+// funcCall = “call” ident [2 “(“ [expression { “,” expression } ] “)” ]
 void Parser::funcCall()
 {
     toks.eat(); // eat CALL
@@ -190,7 +188,7 @@ void Parser::funcCall()
         toks.eat(); // RPAREN
     }
 
-    // FIX: resolve function
+    // FIX: resolve function (add user functions)
     if (ssa.resolve_symbol(val)) {
         // USER DEFINED FUNCTION
         // ssa.add_instr(); // TODO: Jump
@@ -204,17 +202,28 @@ void Parser::ifStatement()
 
     relation();
 
+    ssa.add_block(true);
+    auto left = ssa.reverse_block();
+    auto right = ssa.add_block(false);
+    auto join_block = std::make_shared<Block>();
+
     if (toks.get_type() != TokenType::THEN) {
         SYN_EXPECTED("THEN");
         return;
     }
-    toks.eat(); // else
+    toks.eat(); // then
 
+    ssa.set_current_block(left);
+
+    INFO("%s -> entering statsequence\n", __func__);
     statSequence();
+    left = ssa.get_current_block();
 
+    ssa.set_current_block(right);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
         statSequence();
+        right = ssa.get_current_block();
     }
 
     if (toks.get_type() != TokenType::FI) {
@@ -222,6 +231,16 @@ void Parser::ifStatement()
         return;
     }
     toks.eat(); // FI
+
+    // PHI
+
+    // join
+    join_block->parent_left = left;
+    join_block->parent_right = right;
+    left->right = join_block;
+    right->left = join_block;
+
+    ssa.set_current_block(join_block);
 }
 
 // FIX: while = “while” relation “do” StatSequence “od”
@@ -275,6 +294,8 @@ void Parser::expression()
             loop = false;
             break;
         }
+        if (loop)
+            ssa.add_stack(ssa.get_last_pos());
     } while (loop);
 }
 
@@ -299,6 +320,8 @@ void Parser::term()
             loop = false;
             break;
         }
+        if (loop)
+            ssa.add_stack(ssa.get_last_pos());
     } while (loop);
 }
 
@@ -335,26 +358,39 @@ void Parser::relation()
 {
     expression();
 
-    // TODO: add rest of relations
     switch (toks.get_type()) {
     case TokenType::EQ:
+        toks.eat(); // eq
+        expression();
+        ssa.add_instr(InstrType::CMP);
         break;
     case TokenType::NEQ:
+        toks.eat();
+        expression();
+        ssa.add_instr(InstrType::CMP);
         break;
     case TokenType::LT:
+        toks.eat();
+        expression();
+        ssa.add_instr(InstrType::CMP);
         break;
     case TokenType::LTEQ:
+        toks.eat();
+        expression();
+        ssa.add_instr(InstrType::CMP);
         break;
     case TokenType::GT:
+        toks.eat();
+        expression();
+        ssa.add_instr(InstrType::CMP);
         break;
     case TokenType::GTEQ:
+        toks.eat();
+        expression();
+        ssa.add_instr(InstrType::CMP);
         break;
     default:
         SYN_EXPECTED("Relation");
-        return;
         break;
     }
-    toks.eat(); // relOp
-
-    expression();
 }

@@ -2,10 +2,11 @@ main
 var x, y; {
     let x <- 1;
     let y <- 1;
-    let x <- x + y;
-    let x <- 2 + 2
+    let x <- x * y;
+    let x <- 2 * 2
 }.
 
 // Output SSA
 // BB0 | 0: const #1
-// BB1 | 1: add (2) (2)
+// BB1 | 1: mul (0) (0)
+// BB1 | 1: mul (2) (2)

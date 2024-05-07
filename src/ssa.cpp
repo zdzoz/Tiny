@@ -13,18 +13,26 @@ SSA::SSA()
     add_block(true);
 }
 
-void SSA::add_block(bool isLeft)
+std::shared_ptr<Block> SSA::reverse_block()
+{
+    auto t = current;
+    current = current->parent_left;
+    return t;
+}
+
+std::shared_ptr<Block> SSA::add_block(bool isLeft)
 {
     auto p = current;
     current = std::make_shared<Block>();
-    current->parent = p;
+    current->parent_left = p;
     if (isLeft) {
         p->left = current;
-        INFO("Created BB%llu\n", blocks->left->block_id);
+        INFO("Created BB%llu\n", current->block_id);
     } else {
         p->right = current;
-        INFO("Created BB%llu\n", blocks->right->block_id);
+        INFO("Created BB%llu\n", current->block_id);
     }
+    return current;
 }
 
 void SSA::add_const(u64 val)
@@ -32,7 +40,7 @@ void SSA::add_const(u64 val)
     static std::unordered_map<u64, u64> val_to_pos;
     if (val_to_pos.find(val) != val_to_pos.end()) {
         // last_instr_pos = val_to_pos[val];
-        options.push(val_to_pos[val]);
+        add_stack(val_to_pos[val]);
         return;
     }
 
@@ -44,7 +52,7 @@ void SSA::add_const(u64 val)
     val_to_pos[val] = instr.pos;
 
     blocks->add(std::move(instr));
-    options.push(val);
+    add_stack(val_to_pos[val]);
 }
 
 // FIX: add_instr
@@ -64,17 +72,17 @@ void SSA::add_instr(InstrType type)
     case InstrType::BLT: // blt x y branch to y on x less
     case InstrType::BGE: // bge x y branch to y on x greater or equal
     case InstrType::BGT: { // bgt x y branch to y on x greater
-        assert(options.size() >= 2 && "Not enough options");
-        instr.y = options.top();
-        options.pop();
-        instr.x = options.top();
-        options.pop();
+        assert(instr_stack.size() >= 2 && "Not enough options");
+        instr.y = instr_stack.top();
+        instr_stack.pop();
+        instr.x = instr_stack.top();
+        instr_stack.pop();
     } break;
     case InstrType::READ: // no opts
         break;
     case InstrType::WRITE: {
-        instr.x = options.top();
-        options.pop();
+        instr.x = instr_stack.top();
+        instr_stack.pop();
     } break;
     case InstrType::WRITENL: // no opts
         break;
@@ -94,45 +102,30 @@ void SSA::add_to_block(Instr&& instr)
     current->add(std::move(instr));
 }
 
-void SSA::add_symbols(u64 count)
+void SSA::add_symbols(SymbolTableType&& v)
 {
-    symbol_table.resize(symbol_table.size() + count);
+    symbol_table.reserve(symbol_table.size() + v.size());
+    symbol_table.insert(symbol_table.end(), v.begin(), v.end());
     INFO("symbol_table size %zu\n", symbol_table.size());
+
+    // auto it = symbol_table.begin() + v.size();
+    // for (auto& e : it) {
+    // }
 }
 
-void SSA::set_symbol(const Token* t, u64 pos)
+void SSA::set_symbol(const Token* t)
 {
     if (*t->val() >= symbol_table.size()) {
         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
         exit(1);
     }
+    u64 pos = instr_stack.top();
+    instr_stack.pop();
 
     INFO("Setting %s = %llu\n", t->id().c_str(), pos);
-    symbol_table[*t->val()] = pos;
+    // symbol_table[*t->val()] = pos;
+    symbol_table[*t->val()] = std::make_tuple(t->id(), pos);
 }
-
-// void SSA::resolve_symbol(const Token* t)
-// {
-//     if (*t->val() >= symbol_table.size()) {
-//         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
-//         exit(1);
-//     }
-//
-//     switch (symbol_table[*t->val()].value()) {
-//     case FUNC_INPUT_NUM:
-//         add_instr(InstrType::READ);
-//         return;
-//     case FUNC_OUTPUT_NUM:
-//         add_instr(InstrType::WRITE);
-//         return;
-//     case FUNC_OUTPUT_NL:
-//         add_instr(InstrType::WRITE);
-//         return;
-//     default:
-//         TODO("FIX: user defined functions (%s)\n", __func__);
-//         exit(1);
-//     }
-// }
 
 // resolves symbol and adds to option stack
 bool SSA::resolve_symbol(const Token* t)
@@ -146,23 +139,31 @@ bool SSA::resolve_symbol(const Token* t)
     switch (*t->val()) {
     case FUNC_INPUT_NUM: // no opt
         add_instr(InstrType::READ);
+        add_stack(get_last_pos());
         return false;
     case FUNC_OUTPUT_NUM: // has opt
         add_instr(InstrType::WRITE);
+        add_stack(get_last_pos());
         return false;
     case FUNC_OUTPUT_NL: // no opt
         add_instr(InstrType::WRITENL);
+        add_stack(get_last_pos());
         return false;
     default:
-        if (symbol_table[*t->val()].has_value()) {
+        // if (symbol_table[*t->val()].has_value()) {
+        const auto& [_, val] = symbol_table[*t->val()];
+        if (val.has_value()) {
+            opt = *std::get<1>(symbol_table[*t->val()]);
         } else {
             add_const(0);
-            symbol_table[*t->val()] = 0;
+            auto& [_, sval] = symbol_table[*t->val()];
+            sval = 0;
+            // symbol_table[*t->val()] = std::make_tuple(t->id(), 0);
             WARN("uninitialized symbol '%s'\n", t->id().c_str());
+            opt = 0;
         }
-        opt = *symbol_table[*t->val()];
     }
-    options.push(opt);
+    add_stack(opt);
     return true;
 }
 
@@ -170,13 +171,15 @@ bool SSA::resolve_symbol(const Token* t)
 
 void SSA::print_symbol_table()
 {
+    std::cerr << "Instruction Stack Size: " << instr_stack.size() << std::endl;
     std::cerr << "Symbol Table:" << std::endl;
     u64 i = 0;
-    for (const auto& e : symbol_table) {
+    for (const auto& [symbol, e] : symbol_table) {
+        std::cerr << "\t[" << i << "] " << std::left << std::setw(10) << symbol << " ";
         if (e)
-            std::cerr << "\t" << i << ": " << *e << std::endl;
+            std::cerr << *e << std::endl;
         else
-            std::cerr << "\t" << i << ": Unset" << std::endl;
+            std::cerr << "Unset" << std::endl;
         i++;
     }
     std::cerr << std::endl;
@@ -185,17 +188,23 @@ void SSA::print_symbol_table()
 // TODO: check if print works correctly
 std::ostream& operator<<(std::ostream& os, const SSA& ssa)
 {
+    std::unordered_set<u64> seen = {};
     // └┐├─│
-    std::function<void(Block*, u32)> p_blocks = [&os, &p_blocks](const Block* const block, u32 indent) -> void {
+    std::function<void(Block*, u32)> p_blocks = [&](const Block* const block, u32 indent) -> void {
+        if (seen.find(block->get_block_id()) != seen.end()) {
+            os << std::string(indent, ' ') << "└ BB" << block->get_block_id() << " merged" << std::endl;
+            return;
+        }
+        seen.insert(block->get_block_id());
         os << std::string(indent, ' ') << (indent ? "├ " : "") << "BB" << block->get_block_id() << std::endl;
         block->print_with_indent(os, indent);
 
         if (block->right || block->left)
-            os << "└───────────┐" << std::endl;
+            os << std::string(indent, ' ') << "└───────────────┐" << std::endl;
         if (block->left)
-            p_blocks(block->left.get(), indent + 12);
+            p_blocks(block->left.get(), indent + 16);
         if (block->right)
-            p_blocks(block->right.get(), indent + 12);
+            p_blocks(block->right.get(), indent + 16);
     };
     p_blocks(ssa.blocks.get(), 0);
 

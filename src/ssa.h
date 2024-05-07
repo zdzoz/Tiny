@@ -12,6 +12,8 @@
 #define FUNC_OUTPUT_NUM 1
 #define FUNC_OUTPUT_NL 2
 
+typedef std::vector<std::tuple<std::string, std::optional<u64>>> SymbolTableType;
+
 enum class InstrType {
     CONST, // const #x define an SSA value for a constant
     ADD, // add x y addition
@@ -53,7 +55,7 @@ class Block {
 
 public:
     // NOTE: maybe add sibling property?
-    std::shared_ptr<Block> left, right, parent;
+    std::shared_ptr<Block> left, right, parent_left, parent_right;
 
     Block()
         : block_id(__id++)
@@ -85,25 +87,33 @@ public:
     }
 #endif
 
-    void add_block(bool isLeft);
+    std::shared_ptr<Block> reverse_block();
+    std::shared_ptr<Block> add_block(bool isLeft);
+    inline void set_current_block(std::shared_ptr<Block> b) { current = b; }
+    inline std::shared_ptr<Block> get_current_block() { return current; }
 
     void add_const(u64 val);
     void add_instr(InstrType type);
 
-    void add_symbols(u64 count);
-    void set_symbol(const Token* t, u64 pos);
+    // void add_symbols(u64 count);
+    void add_symbols(SymbolTableType&& v);
+    void set_symbol(const Token* t);
 
     bool resolve_symbol(const Token* t);
     void print_symbol_table();
 
+    inline void add_stack(u64 val) { instr_stack.push(val); }
+
     inline u64 get_last_pos() const { return last_instr_pos; }
 
+    void clear_stack() { instr_stack = {}; };
+
 private:
-    std::stack<u64> options;
+    std::stack<u64> instr_stack;
     u64 last_instr_pos;
 
     // InputNum, OutputNum, OutputNewLine
-    std::vector<std::optional<u64>> symbol_table = { 0, 0, 0 };
+    SymbolTableType symbol_table = { { "read", 0 }, { "write", 0 }, { "writeNL", 0 } };
 
     void add_to_block(Instr&& instr);
 

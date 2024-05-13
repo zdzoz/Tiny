@@ -12,7 +12,7 @@
 #define FUNC_OUTPUT_NUM 1
 #define FUNC_OUTPUT_NL 2
 
-typedef std::vector<std::tuple<std::string, std::optional<u64>>> SymbolTableType;
+typedef std::vector<std::pair<std::string, std::optional<u64>>> SymbolTableType;
 
 enum class InstrType {
     CONST, // const #x define an SSA value for a constant
@@ -37,6 +37,7 @@ enum class InstrType {
 
     END,
     NONE,
+    UNKNOWN,
 };
 
 struct Instr {
@@ -64,17 +65,28 @@ public:
 
     inline u64 get_block_id() const { return block_id; }
 
-    inline void add(Instr&& instr)
+    inline Instr* add(Instr&& instr)
     {
         instructions.emplace_back(instr);
+        return &instructions.back();
     }
 
     void print_with_indent(std::ostream& os, u64 indent) const;
+
+    inline bool empty() { return instructions.empty(); }
+    inline u64 last() { return instructions.back().pos; }
 
 private:
     std::vector<Instr> instructions;
     friend std::ostream& operator<<(std::ostream& os, const Block& b);
 };
+
+// typedef std::tuple<std::shared_ptr<Block>, std::optional<bool>> JoinNodeType;
+typedef struct {
+    std::shared_ptr<Block> node;
+    std::optional<bool> isLeft;
+    std::unordered_map<u64, Instr*> idToPhi;
+} JoinNodeType;
 
 class SSA {
 public:
@@ -103,19 +115,26 @@ public:
     void print_symbol_table();
 
     inline void add_stack(u64 val) { instr_stack.push(val); }
+    void resolve_branch(std::shared_ptr<Block>& parent, std::shared_ptr<Block>& to);
+
+    void resolve_phi(std::unordered_map<u64, Instr*>& idToPhi);
 
     inline u64 get_last_pos() const { return last_instr_pos; }
 
     void clear_stack() { instr_stack = {}; };
 
+    std::stack<JoinNodeType> join_stack;
+
 private:
-    std::stack<u64> instr_stack;
     u64 last_instr_pos;
+
+    std::stack<u64> instr_stack;
 
     // InputNum, OutputNum, OutputNewLine
     SymbolTableType symbol_table = { { "read", 0 }, { "write", 0 }, { "writeNL", 0 } };
 
     void add_to_block(Instr&& instr);
+    Instr* add_to_block(Instr&& instr, std::shared_ptr<Block>& b);
 
     static u64 instruction_num;
     std::shared_ptr<Block> blocks; // head

@@ -61,16 +61,28 @@ void SSA::add_instr(InstrType type)
     Instr instr;
     instr.type = type;
     switch (type) {
-    case InstrType::ADD: // add x y addition
-    case InstrType::SUB: // sub x y subtraction
-    case InstrType::MUL: // mul x y multiplication
-    case InstrType::DIV: // div x y division
-    case InstrType::CMP: // cmp x y comparison
     case InstrType::BNE: // bne x y branch to y on x not equal
     case InstrType::BEQ: // beq x y branch to y on x equal
     case InstrType::BLE: // ble x y branch to y on x less or equal
     case InstrType::BLT: // blt x y branch to y on x less
-    case InstrType::BGE: // bge x y branch to y on x greater or equal
+    case InstrType::BGE: { // bge x y branch to y on x greater or equal
+        add_instr(InstrType::CMP);
+        assert(instr_stack.size() == 1);
+        instr.x = instr_stack.top();
+        instr_stack.pop();
+    } break;
+    case InstrType::CMP: { // cmp x y comparison
+        assert(instr_stack.size() >= 2 && "Not enough options");
+        instr.y = instr_stack.top();
+        instr_stack.pop();
+        instr.x = instr_stack.top();
+        instr_stack.pop();
+        instr_stack.push(get_last_pos() + 1);
+    } break;
+    case InstrType::ADD: // add x y addition
+    case InstrType::SUB: // sub x y subtraction
+    case InstrType::MUL: // mul x y multiplication
+    case InstrType::DIV: // div x y division
     case InstrType::BGT: { // bgt x y branch to y on x greater
         assert(instr_stack.size() >= 2 && "Not enough options");
         instr.y = instr_stack.top();
@@ -86,7 +98,12 @@ void SSA::add_instr(InstrType type)
     } break;
     case InstrType::WRITENL: // no opts
         break;
-    case InstrType::BRA: // bra y branch to y
+    case InstrType::NONE:
+        break;
+    case InstrType::BRA: { // bra y branch to y
+        instr.y = instr_stack.top();
+        instr_stack.pop();
+    } break;
     case InstrType::PHI: // phi x1 x2 compute Phi(x1,    x2)
     default:
         ERROR("Unknown InstrType\n");
@@ -102,15 +119,19 @@ void SSA::add_to_block(Instr&& instr)
     current->add(std::move(instr));
 }
 
+// NOTE: maybe rename to add_phi_to_block
+Instr* SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& b)
+{
+    instr.pos = instruction_num++;
+    // last_instr_pos = instr.pos; NOTE: idk if i need this
+    return b->add(std::move(instr));
+}
+
 void SSA::add_symbols(SymbolTableType&& v)
 {
     symbol_table.reserve(symbol_table.size() + v.size());
     symbol_table.insert(symbol_table.end(), v.begin(), v.end());
     INFO("symbol_table size %zu\n", symbol_table.size());
-
-    // auto it = symbol_table.begin() + v.size();
-    // for (auto& e : it) {
-    // }
 }
 
 void SSA::set_symbol(const Token* t)
@@ -122,12 +143,31 @@ void SSA::set_symbol(const Token* t)
     u64 pos = instr_stack.top();
     instr_stack.pop();
 
+    if (!join_stack.empty() && join_stack.top().isLeft.has_value()) {
+        auto& [join_block, isBranchLeft, idToPhi] = join_stack.top();
+        Instr* phi;
+        if (idToPhi.find(*t->val()) != idToPhi.end()) {
+            phi = idToPhi[*t->val()];
+        } else {
+            auto v = symbol_table[*t->val()].second.value_or(pos);
+            Instr p = {};
+            p.type = InstrType::PHI;
+            p.x = v;
+            p.y = v;
+            phi = add_to_block(std::move(p), join_block);
+            idToPhi[*t->val()] = phi;
+        }
+        if (*isBranchLeft)
+            phi->x = pos;
+        else
+            phi->y = pos;
+    }
     INFO("Setting %s = %llu\n", t->id().c_str(), pos);
-    // symbol_table[*t->val()] = pos;
-    symbol_table[*t->val()] = std::make_tuple(t->id(), pos);
+    symbol_table[*t->val()].second = pos;
 }
 
 // resolves symbol and adds to option stack
+// for functions returns true to indicate user created symbol (func)
 bool SSA::resolve_symbol(const Token* t)
 {
     if (*t->val() >= symbol_table.size()) {
@@ -150,7 +190,6 @@ bool SSA::resolve_symbol(const Token* t)
         add_stack(get_last_pos());
         return false;
     default:
-        // if (symbol_table[*t->val()].has_value()) {
         const auto& [_, val] = symbol_table[*t->val()];
         if (val.has_value()) {
             opt = *std::get<1>(symbol_table[*t->val()]);
@@ -158,13 +197,28 @@ bool SSA::resolve_symbol(const Token* t)
             add_const(0);
             auto& [_, sval] = symbol_table[*t->val()];
             sval = 0;
-            // symbol_table[*t->val()] = std::make_tuple(t->id(), 0);
             WARN("uninitialized symbol '%s'\n", t->id().c_str());
             opt = 0;
         }
     }
     add_stack(opt);
     return true;
+}
+
+void SSA::resolve_branch(std::shared_ptr<Block>& parent, std::shared_ptr<Block>& to)
+{
+    assert(to->instructions.size() != 0);
+    auto& instr_pos = to->instructions[0].pos;
+    auto& p = parent->instructions;
+    p.back().y = instr_pos;
+}
+
+void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
+{
+    for (auto& [pos, instr] : idToPhi) {
+        INFO("Resolving phi of %s = %llu\n", symbol_table[pos].first.c_str(), instr->pos);
+        symbol_table[pos].second = instr->pos;
+    }
 }
 
 /// PRINTS
@@ -304,6 +358,9 @@ std::ostream& operator<<(std::ostream& os, const Instr& instr)
         break;
     case InstrType::READ:
         os << "read";
+        break;
+    case InstrType::NONE:
+        os << "none";
         break;
     default:
         break;

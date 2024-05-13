@@ -96,7 +96,6 @@ void Parser::varDecl()
     toks.eat();
 }
 
-// statement = assignment | funcCall | ifStatement | whileStatement | returnStatement
 void Parser::statSequence()
 {
     do {
@@ -108,6 +107,7 @@ void Parser::statSequence()
     } while (1);
 }
 
+// statement = assignment | funcCall | ifStatement | whileStatement | returnStatement
 void Parser::statement()
 {
     switch (toks.get_type()) {
@@ -156,7 +156,7 @@ void Parser::assignment()
     toks.eat();
 
     expression();
-    // ssa.set_symbol(tok, ssa.get_last_pos());
+
     ssa.set_symbol(tok);
 }
 
@@ -202,10 +202,18 @@ void Parser::ifStatement()
 
     relation();
 
-    ssa.add_block(true);
-    auto left = ssa.reverse_block();
+    auto left = ssa.add_block(true);
+    ssa.reverse_block();
     auto right = ssa.add_block(false);
-    auto join_block = std::make_shared<Block>();
+    JoinNodeType jn = {};
+    jn.node = std::make_shared<Block>();
+    jn.isLeft = std::nullopt;
+    ssa.join_stack.emplace(std::move(jn));
+
+    // ssa.join_stack.emplace(std::make_tuple(std::make_shared<Block>(), std::make_optional<bool>()));
+    auto& [join_block, isBranchLeft, idToPhi] = ssa.join_stack.top();
+    assert(left->parent_left == right->parent_left);
+    auto parent = left->parent_left;
 
     if (toks.get_type() != TokenType::THEN) {
         SYN_EXPECTED("THEN");
@@ -214,16 +222,22 @@ void Parser::ifStatement()
     toks.eat(); // then
 
     ssa.set_current_block(left);
+    isBranchLeft = true;
 
-    INFO("%s -> entering statsequence\n", __func__);
+    INFO("%s -> entering left statSequence\n", __func__);
     statSequence();
     left = ssa.get_current_block();
 
+    isBranchLeft = false;
+    auto original_right = right;
     ssa.set_current_block(right);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
+        INFO("%s -> entering right statSequence\n", __func__);
         statSequence();
         right = ssa.get_current_block();
+    } else {
+        ssa.add_instr(InstrType::NONE);
     }
 
     if (toks.get_type() != TokenType::FI) {
@@ -232,7 +246,17 @@ void Parser::ifStatement()
     }
     toks.eat(); // FI
 
-    // PHI
+    ssa.resolve_branch(parent, original_right);
+
+    isBranchLeft = std::nullopt;
+    // add branch if to left if join_block has instructions
+    if (!join_block->empty()) {
+        auto current = ssa.get_current_block();
+        ssa.set_current_block(left);
+        ssa.add_stack(join_block->last());
+        ssa.add_instr(InstrType::BRA);
+        ssa.set_current_block(current);
+    }
 
     // join
     join_block->parent_left = left;
@@ -241,6 +265,8 @@ void Parser::ifStatement()
     right->left = join_block;
 
     ssa.set_current_block(join_block);
+    ssa.resolve_phi(idToPhi);
+    ssa.join_stack.pop();
 }
 
 // FIX: while = “while” relation “do” StatSequence “od”
@@ -359,35 +385,35 @@ void Parser::relation()
     expression();
 
     switch (toks.get_type()) {
-    case TokenType::EQ:
+    case TokenType::EQ: {
         toks.eat(); // eq
         expression();
-        ssa.add_instr(InstrType::CMP);
-        break;
+        ssa.add_instr(InstrType::BNE);
+    } break;
     case TokenType::NEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP);
+        ssa.add_instr(InstrType::BEQ);
         break;
     case TokenType::LT:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP);
+        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
         break;
     case TokenType::LTEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP);
+        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
         break;
     case TokenType::GT:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP);
+        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
         break;
     case TokenType::GTEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP);
+        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
         break;
     default:
         SYN_EXPECTED("Relation");

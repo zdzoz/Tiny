@@ -1,5 +1,5 @@
 main
-var x, y, z; {
+var x, y; {
     let x <- 1;
     let y <- 1;
     let x <- x + y;
@@ -7,6 +7,6 @@ var x, y, z; {
 }.
 
 // Output SSA
-// BB0 | 0: const#1
+// BB0 | 0: const #1
 // BB1 | 1: add (0) (0)
 // BB1 | 2: write x

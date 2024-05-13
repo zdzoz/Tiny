@@ -1,7 +1,7 @@
 #include "test_common.h"
 
-#include "token.h"
 #include "parser.h"
+#include "token.h"
 
 std::vector<std::filesystem::path> getFiles(std::string folder);
 class BasicParserTest : public testing::TestWithParam<std::filesystem::path> { };
@@ -17,7 +17,28 @@ TEST_P(BasicParserTest, Files)
     EXPECT_EQ(errors, 0);
 }
 
-TEST(BasicParserTest, Multiply) {
+TEST(BasicParserTest, Add)
+{
+    std::string s = R"(
+        main
+        var x, y; {
+            let x <- 1;
+            let y <- 1;
+            let x <- x + y;
+            call OutputNum(x)
+        }.
+    )";
+
+    TokenList toks;
+    ASSERT_TRUE(toks.tokenize(s));
+
+    Parser p(std::move(toks));
+    int errors = p.parse();
+    EXPECT_EQ(errors, 0);
+}
+
+TEST(BasicParserTest, Multiply)
+{
 
     std::string s = R"(
         main

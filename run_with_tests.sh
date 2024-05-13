@@ -6,6 +6,7 @@ export GTEST_COLOR=1
 
 CWD=$(pwd)
 # FILE="tests/basic_tests/just_add.ty"
+# FILE="tests/basic_tests/add_with_output.ty"
 # FILE="tests/basic_tests/just_multiply.ty"
 # FILE="tests/basic_tests/check_inbuilt.ty"
 # FILE="tests/basic_tests/triple_add.ty"

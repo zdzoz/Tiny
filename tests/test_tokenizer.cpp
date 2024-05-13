@@ -5,7 +5,7 @@ TEST(Tokenizer, Unknown)
 {
     std::string s = "&dss";
     TokenList toks;
-    ASSERT_TRUE(toks.tokenize(s));
+    ASSERT_FALSE(toks.tokenize(s));
 
     EXPECT_EQ(toks.size(), 1);
     EXPECT_EQ(toks.get_type(), TokenType::UNKNOWN) << "Expected unknown token";
@@ -20,14 +20,23 @@ TEST(Tokenizer, Let)
     EXPECT_EQ(toks.size(), 11);
     EXPECT_EQ(toks.get_type(), TokenType::MAIN);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::VAR);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::ID);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::SEMI);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::LBRACE);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::LET);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::ID);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::ASSIGN);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::NUM);
     toks.eat();
+    EXPECT_EQ(toks.get_type(), TokenType::RBRACE);
     toks.eat();
     EXPECT_EQ(toks.get_type(), TokenType::PERIOD);
 }

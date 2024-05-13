@@ -10,8 +10,8 @@ CWD=$(pwd)
 # FILE="tests/basic_tests/just_multiply.ty"
 # FILE="tests/basic_tests/check_inbuilt.ty"
 # FILE="tests/basic_tests/triple_add.ty"
-FILE="tests/intermediate_tests/if.ty"
-# FILE="tests/complex_tests/if.ty"
+# FILE="tests/intermediate_tests/if.ty"
+FILE="tests/intermediate_tests/prof_basic.ty"
 
 if [ ! -f "$CWD/$FILE" ]; then
     echo "failed to find file: $FILE"

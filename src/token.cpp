@@ -26,6 +26,7 @@ static u64 get_id(const std::string& id);
 bool TokenList::__tokenize(std::istream& is)
 {
     assert(TOKEN_TYPE_COUNT == token_str.size());
+    bool ret = true;
 
     char c;
     while (is.get(c)) {
@@ -76,28 +77,37 @@ bool TokenList::__tokenize(std::istream& is)
         case '}':
             type = TokenType::RBRACE;
             break;
-        case '>':
-            type = TokenType::GT;
-            break;
         case '=': {
-            switch (is.peek()) {
-            case '=':
+            if (is.peek() == '=') {
                 type = TokenType::EQ;
                 is.get();
-                break;
-            default:
-                break;
+            }
+        } break;
+        case '!': {
+            if (is.peek() == '=') {
+                type = TokenType::NEQ;
+                is.get();
+            }
+        } break;
+        case '>': {
+            if (is.peek() == '=') {
+                type = TokenType::GTEQ;
+                is.get();
+            } else {
+                type = TokenType::GT;
             }
         } break;
         case '<': {
             if (is.peek() == '-') {
                 type = TokenType::ASSIGN;
                 is.get();
-                break;
+            } else if (is.peek() == '=') {
+                type = TokenType::LTEQ;
+                is.get();
+            } else {
+                type = TokenType::LT;
             }
-            type = TokenType::LT;
-            break;
-        }
+        } break;
         default:
             if (isdigit(c)) {
                 u64 num = c - '0';
@@ -152,6 +162,7 @@ bool TokenList::__tokenize(std::istream& is)
 
                 type = TokenType::UNKNOWN;
                 save_id = true;
+                ret = false;
             }
         }
 
@@ -161,7 +172,7 @@ bool TokenList::__tokenize(std::istream& is)
             toks.emplace_back(type, val);
     }
 
-    return true;
+    return ret;
 }
 
 bool TokenList::tokenize(std::filesystem::path file)

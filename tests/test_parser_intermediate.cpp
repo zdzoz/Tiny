@@ -3,7 +3,7 @@
 #include "parser.h"
 #include "token.h"
 
-#if INTERMEDIATE == 1
+#if INTERMEDIATE == 0
 
 class IntermediateParserTestSuite : public testing::TestWithParam<std::filesystem::path> { };
 

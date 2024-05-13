@@ -55,45 +55,43 @@ void SSA::add_const(u64 val)
     add_stack(val_to_pos[val]);
 }
 
-// FIX: add_instr
 void SSA::add_instr(InstrType type)
 {
-    Instr instr;
-    instr.type = type;
+    Instr __instr;
+    Instr* instr = &__instr;
+    bool none = false;
+    if (!get_current_block()->empty() && get_current_block()->back().type == InstrType::NONE) {
+        instr = &get_current_block()->back();
+        none = true;
+    }
+
+    instr->type = type;
     switch (type) {
     case InstrType::BNE: // bne x y branch to y on x not equal
     case InstrType::BEQ: // beq x y branch to y on x equal
     case InstrType::BLE: // ble x y branch to y on x less or equal
     case InstrType::BLT: // blt x y branch to y on x less
+    case InstrType::BGT: // bgt x y branch to y on x greater
     case InstrType::BGE: { // bge x y branch to y on x greater or equal
         add_instr(InstrType::CMP);
-        assert(instr_stack.size() == 1);
-        instr.x = instr_stack.top();
-        instr_stack.pop();
+        assert(instr_stack.size() == 0);
+        instr->x = get_last_pos();
     } break;
-    case InstrType::CMP: { // cmp x y comparison
-        assert(instr_stack.size() >= 2 && "Not enough options");
-        instr.y = instr_stack.top();
-        instr_stack.pop();
-        instr.x = instr_stack.top();
-        instr_stack.pop();
-        instr_stack.push(get_last_pos() + 1);
-    } break;
+    case InstrType::CMP: // cmp x y comparison
     case InstrType::ADD: // add x y addition
     case InstrType::SUB: // sub x y subtraction
     case InstrType::MUL: // mul x y multiplication
-    case InstrType::DIV: // div x y division
-    case InstrType::BGT: { // bgt x y branch to y on x greater
+    case InstrType::DIV: { // div x y division
         assert(instr_stack.size() >= 2 && "Not enough options");
-        instr.y = instr_stack.top();
+        instr->y = instr_stack.top();
         instr_stack.pop();
-        instr.x = instr_stack.top();
+        instr->x = instr_stack.top();
         instr_stack.pop();
     } break;
     case InstrType::READ: // no opts
         break;
     case InstrType::WRITE: {
-        instr.x = instr_stack.top();
+        instr->x = instr_stack.top();
         instr_stack.pop();
     } break;
     case InstrType::WRITENL: // no opts
@@ -101,15 +99,21 @@ void SSA::add_instr(InstrType type)
     case InstrType::NONE:
         break;
     case InstrType::BRA: { // bra y branch to y
-        instr.y = instr_stack.top();
+        instr->y = instr_stack.top();
         instr_stack.pop();
     } break;
     case InstrType::PHI: // phi x1 x2 compute Phi(x1,    x2)
+        ERROR("PHI should not be created directly in %s\n", __func__);
+        break;
     default:
         ERROR("Unknown InstrType\n");
         exit(1);
     }
-    add_to_block(std::move(instr));
+    if (!none)
+        add_to_block(std::move(__instr));
+    else {
+        last_instr_pos = instr->pos;
+    }
 }
 
 void SSA::add_to_block(Instr&& instr)
@@ -120,7 +124,7 @@ void SSA::add_to_block(Instr&& instr)
 }
 
 // NOTE: maybe rename to add_phi_to_block
-Instr* SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& b)
+u64 SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& b)
 {
     instr.pos = instruction_num++;
     // last_instr_pos = instr.pos; NOTE: idk if i need this
@@ -147,15 +151,17 @@ void SSA::set_symbol(const Token* t)
         auto& [join_block, isBranchLeft, idToPhi] = join_stack.top();
         Instr* phi;
         if (idToPhi.find(*t->val()) != idToPhi.end()) {
-            phi = idToPhi[*t->val()];
+            u64 phi_pos = idToPhi[*t->val()];
+            phi = &join_block->instructions[phi_pos];
         } else {
             auto v = symbol_table[*t->val()].second.value_or(pos);
             Instr p = {};
             p.type = InstrType::PHI;
             p.x = v;
             p.y = v;
-            phi = add_to_block(std::move(p), join_block);
-            idToPhi[*t->val()] = phi;
+            u64 phi_pos = add_to_block(std::move(p), join_block);
+            idToPhi[*t->val()] = phi_pos;
+            phi = &join_block->instructions[phi_pos];
         }
         if (*isBranchLeft)
             phi->x = pos;
@@ -213,11 +219,12 @@ void SSA::resolve_branch(std::shared_ptr<Block>& parent, std::shared_ptr<Block>&
     p.back().y = instr_pos;
 }
 
-void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
+void SSA::resolve_phi(std::unordered_map<u64, u64>& idToPhi, std::shared_ptr<Block>& jn)
 {
-    for (auto& [pos, instr] : idToPhi) {
-        INFO("Resolving phi of %s = %llu\n", symbol_table[pos].first.c_str(), instr->pos);
-        symbol_table[pos].second = instr->pos;
+    for (auto& [pos, phi_pos] : idToPhi) {
+        auto& phi = jn->instructions[phi_pos];
+        INFO("Resolving phi of %s = %llu\n", symbol_table[pos].first.c_str(), phi.pos);
+        symbol_table[pos].second = phi.pos;
     }
 }
 

@@ -3,7 +3,7 @@
 #include "parser.h"
 #include "token.h"
 
-#if COMPLEX == 1
+#if COMPLEX == 0
 
 class ComplexParserTestSuite : public testing::TestWithParam<std::filesystem::path> { };
 

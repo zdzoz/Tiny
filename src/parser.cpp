@@ -158,6 +158,10 @@ void Parser::assignment()
     expression();
 
     ssa.set_symbol(tok);
+
+    // add placeholder if current is empty
+    if (ssa.get_current_block()->empty())
+        ssa.add_instr(InstrType::NONE);
 }
 
 // funcCall = “call” ident [2 “(“ [expression { “,” expression } ] “)” ]
@@ -226,6 +230,7 @@ void Parser::ifStatement()
 
     INFO("%s -> entering left statSequence\n", __func__);
     statSequence();
+    INFO("%s -> exiting left statSequence\n", __func__);
     left = ssa.get_current_block();
 
     isBranchLeft = false;
@@ -235,6 +240,7 @@ void Parser::ifStatement()
         toks.eat(); // else
         INFO("%s -> entering right statSequence\n", __func__);
         statSequence();
+        INFO("%s -> exiting right statSequence\n", __func__);
         right = ssa.get_current_block();
     } else {
         ssa.add_instr(InstrType::NONE);
@@ -253,7 +259,7 @@ void Parser::ifStatement()
     if (!join_block->empty()) {
         auto current = ssa.get_current_block();
         ssa.set_current_block(left);
-        ssa.add_stack(join_block->last());
+        ssa.add_stack(join_block->front().pos);
         ssa.add_instr(InstrType::BRA);
         ssa.set_current_block(current);
     }
@@ -265,7 +271,7 @@ void Parser::ifStatement()
     right->left = join_block;
 
     ssa.set_current_block(join_block);
-    ssa.resolve_phi(idToPhi);
+    ssa.resolve_phi(idToPhi, join_block);
     ssa.join_stack.pop();
 }
 
@@ -398,22 +404,22 @@ void Parser::relation()
     case TokenType::LT:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
+        ssa.add_instr(InstrType::BGE);
         break;
     case TokenType::LTEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
+        ssa.add_instr(InstrType::BGT);
         break;
     case TokenType::GT:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
+        ssa.add_instr(InstrType::BLE);
         break;
     case TokenType::GTEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::CMP); // FIX: should not be cmp
+        ssa.add_instr(InstrType::BLT);
         break;
     default:
         SYN_EXPECTED("Relation");

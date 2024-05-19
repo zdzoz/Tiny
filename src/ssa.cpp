@@ -124,7 +124,7 @@ void SSA::add_to_block(Instr&& instr)
 }
 
 // NOTE: maybe rename to add_phi_to_block
-u64 SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& join_block)
+Instr& SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& join_block)
 {
     instr.pos = instruction_num++;
     // last_instr_pos = instr.pos; NOTE: idk if i need this
@@ -151,17 +151,15 @@ void SSA::set_symbol(const Token* t)
         auto& [join_block, isBranchLeft, idToPhi] = join_stack.top();
         Instr* phi;
         if (idToPhi.find(*t->val()) != idToPhi.end()) {
-            u64 phi_pos = idToPhi[*t->val()];
-            phi = &join_block->instructions[phi_pos];
+            phi = idToPhi[*t->val()];
         } else {
             auto v = symbol_table[*t->val()].second.value_or(pos);
             Instr p = {};
             p.type = InstrType::PHI;
             p.x = v;
             p.y = v;
-            u64 phi_pos = add_to_block(std::move(p), join_block);
-            idToPhi[*t->val()] = phi_pos;
-            phi = &join_block->instructions[phi_pos];
+            idToPhi[*t->val()] = &add_to_block(std::move(p), join_block);
+            phi = idToPhi[*t->val()];
         }
         if (*isBranchLeft)
             phi->x = pos;
@@ -219,12 +217,11 @@ void SSA::resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& t
     p.back().y = instr_pos;
 }
 
-void SSA::resolve_phi(std::unordered_map<u64, u64>& idToPhi, std::shared_ptr<Block>& jn)
+void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
 {
-    for (auto& [pos, phi_pos] : idToPhi) {
-        auto& phi = jn->instructions[phi_pos];
-        INFO("Resolving phi of %s = %llu\n", symbol_table[pos].first.c_str(), phi.pos);
-        symbol_table[pos].second = phi.pos;
+    for (auto& [pos, phi] : idToPhi) {
+        INFO("Resolving phi of %s = %llu\n", symbol_table[pos].first.c_str(), phi->pos);
+        symbol_table[pos].second = phi->pos;
     }
 }
 

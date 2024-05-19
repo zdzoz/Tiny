@@ -271,7 +271,7 @@ void Parser::ifStatement()
     right->left = join_block;
 
     ssa.set_current_block(join_block);
-    ssa.resolve_phi(idToPhi, join_block);
+    ssa.resolve_phi(idToPhi);
     ssa.join_stack.pop();
 }
 

@@ -11,8 +11,8 @@ CWD=$(pwd)
 # FILE="tests/basic_tests/check_inbuilt.ty"
 # FILE="tests/basic_tests/triple_add.ty"
 # FILE="tests/intermediate_tests/if.ty"
-FILE="tests/intermediate_tests/prof_basic.ty"
-# FILE="tests/complex_tests/while.ty"
+# FILE="tests/intermediate_tests/prof_basic.ty"
+FILE="tests/complex_tests/while.ty"
 # FILE="tests/complex_tests/complex.ty"
 
 if [ ! -f "$CWD/$FILE" ]; then

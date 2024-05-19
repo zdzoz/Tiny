@@ -65,10 +65,17 @@ public:
 
     inline u64 get_block_id() const { return block_id; }
 
-    inline u64 add(Instr&& instr)
+    inline Instr& add(Instr&& instr)
     {
         instructions.emplace_back(instr);
-        return instructions.size() - 1;
+        // return instructions.size() - 1;
+        return instructions.back();
+    }
+
+    inline Instr& add_front(Instr&& instr)
+    {
+        instructions.emplace_front(instr);
+        return instructions.front();
     }
 
     void print_with_indent(std::ostream& os, u64 indent) const;
@@ -87,7 +94,7 @@ private:
 typedef struct {
     std::shared_ptr<Block> node;
     std::optional<bool> isLeft;
-    std::unordered_map<u64, u64> idToPhi;
+    std::unordered_map<u64, Instr*> idToPhi;
 } JoinNodeType;
 
 class SSA {
@@ -119,7 +126,7 @@ public:
     inline void add_stack(u64 val) { instr_stack.push(val); }
     void resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to);
 
-    void resolve_phi(std::unordered_map<u64, u64>& idToPhi, std::shared_ptr<Block>& jn);
+    void resolve_phi(std::unordered_map<u64, Instr*>& idToPhi);
 
     inline u64 get_last_pos() const { return last_instr_pos; }
 
@@ -136,7 +143,7 @@ private:
     SymbolTableType symbol_table = { { "read", 0 }, { "write", 0 }, { "writeNL", 0 } };
 
     void add_to_block(Instr&& instr);
-    u64 add_to_block(Instr&& instr, std::shared_ptr<Block>& b);
+    Instr& add_to_block(Instr&& instr, std::shared_ptr<Block>& b);
 
     static u64 instruction_num;
     std::shared_ptr<Block> blocks; // head

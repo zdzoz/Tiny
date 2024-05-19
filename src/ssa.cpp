@@ -124,11 +124,11 @@ void SSA::add_to_block(Instr&& instr)
 }
 
 // NOTE: maybe rename to add_phi_to_block
-u64 SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& b)
+u64 SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& join_block)
 {
     instr.pos = instruction_num++;
     // last_instr_pos = instr.pos; NOTE: idk if i need this
-    return b->add(std::move(instr));
+    return join_block->add(std::move(instr));
 }
 
 void SSA::add_symbols(SymbolTableType&& v)
@@ -198,7 +198,7 @@ bool SSA::resolve_symbol(const Token* t)
     default:
         const auto& [_, val] = symbol_table[*t->val()];
         if (val.has_value()) {
-            opt = *std::get<1>(symbol_table[*t->val()]);
+            opt = *symbol_table[*t->val()].second;
         } else {
             add_const(0);
             auto& [_, sval] = symbol_table[*t->val()];
@@ -211,11 +211,11 @@ bool SSA::resolve_symbol(const Token* t)
     return true;
 }
 
-void SSA::resolve_branch(std::shared_ptr<Block>& parent, std::shared_ptr<Block>& to)
+void SSA::resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to)
 {
     assert(to->instructions.size() != 0);
     auto& instr_pos = to->instructions[0].pos;
-    auto& p = parent->instructions;
+    auto& p = from->instructions;
     p.back().y = instr_pos;
 }
 

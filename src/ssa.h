@@ -79,7 +79,8 @@ public:
     inline void pop_back() { instructions.pop_back(); }
 
 private:
-    std::vector<Instr> instructions;
+    // NOTE: maybe change to std::deque instead of vector (allows references to items)
+    std::deque<Instr> instructions;
     friend std::ostream& operator<<(std::ostream& os, const Block& b);
 };
 
@@ -116,7 +117,7 @@ public:
     void print_symbol_table();
 
     inline void add_stack(u64 val) { instr_stack.push(val); }
-    void resolve_branch(std::shared_ptr<Block>& parent, std::shared_ptr<Block>& to);
+    void resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to);
 
     void resolve_phi(std::unordered_map<u64, u64>& idToPhi, std::shared_ptr<Block>& jn);
 

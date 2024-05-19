@@ -30,7 +30,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::cout << p.get_ssa() << std::endl;
+    auto ir = p.get_ssa();
+
+    std::cout << ir << std::endl;
+
+    // ir.generate_dot(file);
 
     return 0;
 }

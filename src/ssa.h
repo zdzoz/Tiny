@@ -65,7 +65,7 @@ public:
 
     inline u64 get_block_id() const { return block_id; }
 
-    inline Instr& add(Instr&& instr)
+    inline Instr& add_back(Instr&& instr)
     {
         instructions.emplace_back(instr);
         // return instructions.size() - 1;
@@ -95,6 +95,7 @@ typedef struct {
     std::shared_ptr<Block> node;
     std::optional<bool> isLeft;
     std::unordered_map<u64, Instr*> idToPhi;
+    std::optional<Instr*> whileInfo;
 } JoinNodeType;
 
 class SSA {
@@ -119,6 +120,7 @@ public:
     // void add_symbols(u64 count);
     void add_symbols(SymbolTableType&& v);
     void set_symbol(const Token* t);
+    void add_symbols_to_block(JoinNodeType& join_node);
 
     bool resolve_symbol(const Token* t);
     void print_symbol_table();
@@ -127,12 +129,18 @@ public:
     void resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to);
 
     void resolve_phi(std::unordered_map<u64, Instr*>& idToPhi);
+    void commit_phi(std::unordered_map<u64, Instr*>& idToPhi);
 
     inline u64 get_last_pos() const { return last_instr_pos; }
+    inline Instr* get_cmp() {
+        Instr* cmp = &get_current_block()->instructions[get_current_block()->instructions.size() - 2];
+        assert(cmp->type == InstrType::CMP);
+        return cmp;
+    }
 
     void clear_stack() { instr_stack = {}; };
 
-    std::stack<JoinNodeType> join_stack;
+    std::deque<JoinNodeType> join_stack;
 
 private:
     u64 last_instr_pos;
@@ -140,7 +148,7 @@ private:
     std::stack<u64> instr_stack;
 
     // InputNum, OutputNum, OutputNewLine
-    SymbolTableType symbol_table = { { "read", 0 }, { "write", 0 }, { "writeNL", 0 } };
+    SymbolTableType symbol_table = { { "read", std::nullopt }, { "write", std::nullopt }, { "writeNL", std::nullopt } };
 
     void add_to_block(Instr&& instr);
     Instr& add_to_block(Instr&& instr, std::shared_ptr<Block>& b);

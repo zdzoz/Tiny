@@ -199,7 +199,7 @@ void Parser::funcCall()
     }
 }
 
-// FIX: if = “if” relation “then” statSequence [ “else” statSequence ] “fi”
+// if = “if” relation “then” statSequence [ “else” statSequence ] “fi”
 void Parser::ifStatement()
 {
     toks.eat(); // IF
@@ -209,13 +209,13 @@ void Parser::ifStatement()
     auto left = ssa.add_block(true);
     ssa.reverse_block();
     auto right = ssa.add_block(false);
-    JoinNodeType jn = {};
-    jn.node = std::make_shared<Block>();
-    jn.isLeft = std::nullopt;
-    ssa.join_stack.emplace(std::move(jn));
+    JoinNodeType join = {};
+    join.node = std::make_shared<Block>();
+    join.isLeft = std::nullopt;
+    ssa.add_symbols_to_block(join);
+    ssa.join_stack.emplace_back(std::move(join));
 
-    // ssa.join_stack.emplace(std::make_tuple(std::make_shared<Block>(), std::make_optional<bool>()));
-    auto& [join_block, isBranchLeft, idToPhi] = ssa.join_stack.top();
+    auto& [join_block, isBranchLeft, idToPhi, _] = ssa.join_stack.back();
     assert(left->parent_left == right->parent_left);
     auto parent = left->parent_left;
 
@@ -271,16 +271,35 @@ void Parser::ifStatement()
     right->left = join_block;
 
     ssa.set_current_block(join_block);
+
     ssa.resolve_phi(idToPhi);
-    ssa.join_stack.pop();
+    ssa.commit_phi(idToPhi);
+
+    ssa.join_stack.pop_back();
 }
 
-// FIX: while = “while” relation “do” StatSequence “od”
+// while = “while” relation “do” StatSequence “od”
 void Parser::whileStatement()
 {
     toks.eat(); // while
 
+    auto join_block = ssa.add_block(true);
+    JoinNodeType join = {};
+    join.node = join_block;
+    join.isLeft = false;
+
+    ssa.reverse_block();
+    auto exit_block = ssa.add_block(false);
+    ssa.add_instr(InstrType::NONE);
+
+    ssa.set_current_block(join_block);
+    ssa.add_symbols_to_block(join);
+    ssa.resolve_phi(join.idToPhi);
     relation();
+    join.whileInfo = ssa.get_cmp();
+    ssa.join_stack.emplace_back(std::move(join));
+    ssa.resolve_branch(join_block, exit_block);
+    ssa.add_block(true);
 
     if (toks.get_type() != TokenType::DO) {
         SYN_EXPECTED("DO");
@@ -289,15 +308,23 @@ void Parser::whileStatement()
     toks.eat();
 
     statSequence();
+    auto end_block = ssa.get_current_block();
+    ssa.add_stack(join_block->front().pos);
+    ssa.add_instr(InstrType::BRA);
 
     if (toks.get_type() != TokenType::OD) {
         SYN_EXPECTED("OD");
-        return;
-    }
-    toks.eat();
+    } else
+        toks.eat();
+    ssa.set_current_block(exit_block);
+
+    ssa.resolve_phi(ssa.join_stack.back().idToPhi);
+    ssa.commit_phi(ssa.join_stack.back().idToPhi);
+
+    ssa.join_stack.pop_back();
 }
 
-// TODO: return
+// FIX: return
 void Parser::returnStatement()
 {
     TODO("Implement %s\n", __func__);
@@ -305,7 +332,7 @@ void Parser::returnStatement()
 
 /// END STATEMENTS ///
 
-// FIX: expression = term {(“+” | “-”) term}
+// expression = term {(“+” | “-”) term}
 void Parser::expression()
 {
     term();
@@ -331,7 +358,7 @@ void Parser::expression()
     } while (loop);
 }
 
-// FIX: term = factor { (“*” | “/”) factor}.
+// term = factor { (“*” | “/”) factor}.
 void Parser::term()
 {
     factor();
@@ -357,7 +384,7 @@ void Parser::term()
     } while (loop);
 }
 
-// FIX: factor = ident | number | “(“ expression “)” | funcCall
+// factor = ident | number | “(“ expression “)” | funcCall
 void Parser::factor()
 {
     switch (toks.get_type()) {
@@ -385,7 +412,7 @@ void Parser::factor()
     }
 }
 
-// FIX: relation = expression relOp expression
+// relation = expression relOp expression
 void Parser::relation()
 {
     expression();

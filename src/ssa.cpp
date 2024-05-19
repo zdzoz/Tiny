@@ -1,4 +1,5 @@
 #include "ssa.h"
+#include "token.h"
 
 #include <iostream>
 #include <ostream>
@@ -51,7 +52,7 @@ void SSA::add_const(u64 val)
     last_instr_pos = instr.pos;
     val_to_pos[val] = instr.pos;
 
-    blocks->add(std::move(instr));
+    blocks->add_back(std::move(instr));
     add_stack(val_to_pos[val]);
 }
 
@@ -120,15 +121,15 @@ void SSA::add_to_block(Instr&& instr)
 {
     instr.pos = instruction_num++;
     last_instr_pos = instr.pos;
-    current->add(std::move(instr));
+    current->add_back(std::move(instr));
 }
 
-// NOTE: maybe rename to add_phi_to_block
+// NOTE: adds to front of stack, useful for phi
 Instr& SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& join_block)
 {
     instr.pos = instruction_num++;
     // last_instr_pos = instr.pos; NOTE: idk if i need this
-    return join_block->add(std::move(instr));
+    return join_block->add_front(std::move(instr));
 }
 
 void SSA::add_symbols(SymbolTableType&& v)
@@ -147,12 +148,14 @@ void SSA::set_symbol(const Token* t)
     u64 pos = instr_stack.top();
     instr_stack.pop();
 
-    if (!join_stack.empty() && join_stack.top().isLeft.has_value()) {
-        auto& [join_block, isBranchLeft, idToPhi] = join_stack.top();
+    if (!join_stack.empty() && join_stack.back().isLeft.has_value()) {
+        auto& [join_block, isBranchLeft, idToPhi, whileInfo] = join_stack.back();
         Instr* phi;
         if (idToPhi.find(*t->val()) != idToPhi.end()) {
             phi = idToPhi[*t->val()];
         } else {
+            // TODO: probably can remove this else
+            throw std::runtime_error("unreachable " + std::string(__func__));
             auto v = symbol_table[*t->val()].second.value_or(pos);
             Instr p = {};
             p.type = InstrType::PHI;
@@ -160,6 +163,21 @@ void SSA::set_symbol(const Token* t)
             p.y = v;
             idToPhi[*t->val()] = &add_to_block(std::move(p), join_block);
             phi = idToPhi[*t->val()];
+
+            if (whileInfo.has_value()) {
+                // resolve backwards
+                auto& curr = get_current_block()->instructions;
+                for (auto it = curr.rbegin(); it != curr.rend(); it++) {
+                    if ((*it).x == v)
+                        (*it).x = phi->pos;
+                    if ((*it).y == v)
+                        (*it).y = phi->pos;
+                }
+                if (whileInfo.value()->x == v)
+                    whileInfo.value()->x = phi->pos;
+                if (whileInfo.value()->y == v)
+                    whileInfo.value()->y = phi->pos;
+            }
         }
         if (*isBranchLeft)
             phi->x = pos;
@@ -168,6 +186,24 @@ void SSA::set_symbol(const Token* t)
     }
     INFO("Setting %s = %llu\n", t->id().c_str(), pos);
     symbol_table[*t->val()].second = pos;
+}
+
+void SSA::add_symbols_to_block(JoinNodeType& join_node)
+{
+    u64 i = 0;
+    for (auto& s : symbol_table) {
+        if (!s.second.has_value()) {
+            ++i;
+            continue;
+        }
+
+        Instr p = {};
+        p.type = InstrType::PHI;
+        p.x = *s.second;
+        p.y = p.x;
+        join_node.idToPhi[i] = &add_to_block(std::move(p), join_node.node);
+        ++i;
+    }
 }
 
 // resolves symbol and adds to option stack
@@ -212,16 +248,28 @@ bool SSA::resolve_symbol(const Token* t)
 void SSA::resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to)
 {
     assert(to->instructions.size() != 0);
-    auto& instr_pos = to->instructions[0].pos;
+    auto& instr_pos = to->instructions.front().pos;
     auto& p = from->instructions;
     p.back().y = instr_pos;
 }
 
 void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
 {
-    for (auto& [pos, phi] : idToPhi) {
-        INFO("Resolving phi of %s = %llu\n", symbol_table[pos].first.c_str(), phi->pos);
-        symbol_table[pos].second = phi->pos;
+    for (auto& [id, phi] : idToPhi) {
+        INFO("Resolving phi of %s = %llu\n", symbol_table[id].first.c_str(), phi->pos);
+        symbol_table[id].second = phi->pos;
+    }
+}
+
+void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
+{
+    if (join_stack.size() > 1) {
+        auto& outer = join_stack[join_stack.size() - 2];
+        for (auto& i : idToPhi) {
+            if (outer.idToPhi.find(i.first) != outer.idToPhi.end()) {
+                outer.idToPhi[i.first]->y = i.second->pos;
+            }
+        }
     }
 }
 
@@ -243,7 +291,6 @@ void SSA::print_symbol_table()
     std::cerr << std::endl;
 }
 
-// TODO: check if print works correctly
 std::ostream& operator<<(std::ostream& os, const SSA& ssa)
 {
     std::unordered_set<u64> seen = {};

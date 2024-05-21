@@ -273,6 +273,7 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
         }
     }
 }
+
 /// DOT GENERATION ///
 
 // Record:      bb0 [shape=record, label="<b>BB0 | {3: const #0}"]
@@ -315,12 +316,25 @@ void SSA::generate_dot() const
         }
         std::cout << record_end() << std::endl;
 
-        if (block->parent_left)
-            std::cout << create_link(block->parent_left->block_id, block->block_id, "") << std::endl;
-        if (block->parent_right)
-            std::cout << create_link(block->parent_right->block_id, block->block_id, "") << std::endl;
+        std::string primary_str = "";
+        std::string secondary_str = "fall";
+        if (block->parent_left && block->parent_right) {
+            primary_str = "branch";
+        }
+        // parent_right is unused
+        if (block->parent_left && block->parent_left->left && block->parent_left->right) {
+            primary_str = block->parent_left->right.get() == block ? "branch" : "fall";
+        }
+        if (block->parent_left) {
+            std::cout << create_link(block->parent_left->block_id, block->block_id, primary_str) << std::endl;
+        }
+        if (block->parent_right) {
+            std::cout << create_link(block->parent_right->block_id, block->block_id, secondary_str) << std::endl;
+        }
         if (block->dominator)
             std::cout << create_dominator(block->dominator->block_id, block->block_id) << std::endl;
+        if (block->entry)
+            std::cout << create_link(block->block_id, block->entry->block_id, "branch") << std::endl;
 
         if (block->left)
             p_blocks(block->left.get());

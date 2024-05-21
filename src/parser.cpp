@@ -318,6 +318,7 @@ void Parser::whileStatement()
 
     statSequence();
     auto end_block = ssa.get_current_block();
+    end_block->entry = join_block;
     ssa.add_stack(join_block->front().pos);
     ssa.add_instr(InstrType::BRA);
 

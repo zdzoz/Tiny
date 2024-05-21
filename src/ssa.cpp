@@ -155,6 +155,9 @@ void SSA::set_symbol(const Token* t)
             phi = idToPhi[*t->val()];
         } else {
             // TODO: probably can remove this else
+            PRTOKLN(*t);
+            print_symbol_table();
+            std::cout << *this;
             throw std::runtime_error("unreachable " + std::string(__func__));
             auto v = symbol_table[*t->val()].second.value_or(pos);
             Instr p = {};
@@ -181,8 +184,11 @@ void SSA::set_symbol(const Token* t)
         }
         if (*isBranchLeft)
             phi->x = pos;
-        else
+        else {
+            if (!phi->x.has_value())
+                phi->x = pos;
             phi->y = pos;
+        }
     }
     INFO("Setting %s = %llu\n", t->id().c_str(), pos);
     symbol_table[*t->val()].second = pos;
@@ -190,19 +196,14 @@ void SSA::set_symbol(const Token* t)
 
 void SSA::add_symbols_to_block(JoinNodeType& join_node)
 {
-    u64 i = 0;
-    for (auto& s : symbol_table) {
-        if (!s.second.has_value()) {
-            ++i;
-            continue;
-        }
+    for (u64 i = inbuilt_count; i < symbol_table.size(); ++i) {
+        auto& s = symbol_table[i];
 
         Instr p = {};
         p.type = InstrType::PHI;
-        p.x = *s.second;
+        p.x = s.second;
         p.y = p.x;
         join_node.idToPhi[i] = &add_to_block(std::move(p), join_node.node);
-        ++i;
     }
 }
 
@@ -272,12 +273,18 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
         }
     }
 }
+/// DOT GENERATION ///
+
+void SSA::generate_dot() const
+{
+}
 
 /// PRINTS
 
 void SSA::print_symbol_table()
 {
     std::cerr << "Instruction Stack Size: " << instr_stack.size() << std::endl;
+    std::cerr << "Inbuilt symbols: " << inbuilt_count << std::endl;
     std::cerr << "Symbol Table:" << std::endl;
     u64 i = 0;
     for (const auto& [symbol, e] : symbol_table) {
@@ -338,7 +345,7 @@ std::ostream& operator<<(std::ostream& os, const Block& b)
 std::ostream& operator<<(std::ostream& os, const Instr& instr)
 {
     const auto common = [&]() {
-        os << " (" << instr.x << ") (" << instr.y << ")";
+        os << " (" << *instr.x << ") (" << *instr.y << ")";
     };
 
     os << instr.pos << ": ";
@@ -396,13 +403,13 @@ std::ostream& operator<<(std::ostream& os, const Instr& instr)
         common();
         break;
     case InstrType::BRA:
-        os << "bra " << instr.y;
+        os << "bra " << *instr.y;
         break;
     case InstrType::CONST:
-        os << "const #" << instr.x;
+        os << "const #" << *instr.x;
         break;
     case InstrType::WRITE:
-        os << "write " << instr.x;
+        os << "write " << *instr.x;
         break;
     case InstrType::WRITENL:
         os << "writeNL";

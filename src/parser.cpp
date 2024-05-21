@@ -228,19 +228,23 @@ void Parser::ifStatement()
     ssa.set_current_block(left);
     isBranchLeft = true;
 
-    INFO("%s -> entering left statSequence\n", __func__);
+    INFO("[%s] entering left statSequence\n", __func__);
     statSequence();
-    INFO("%s -> exiting left statSequence\n", __func__);
+    INFO("[%s] exiting left statSequence\n", __func__);
     left = ssa.get_current_block();
 
     isBranchLeft = false;
     auto original_right = right;
     ssa.set_current_block(right);
+    ssa.add_instr(InstrType::NONE);
+    INFO("[%s] Resolving branch\n", __func__);
+    ssa.resolve_branch(parent, original_right);
+    INFO("[%s] Resolved branch\n", __func__);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
-        INFO("%s -> entering right statSequence\n", __func__);
+        INFO("[%s] entering right statSequence\n", __func__);
         statSequence();
-        INFO("%s -> exiting right statSequence\n", __func__);
+        INFO("[%s] exiting right statSequence\n", __func__);
         right = ssa.get_current_block();
     } else {
         ssa.add_instr(InstrType::NONE);
@@ -251,8 +255,6 @@ void Parser::ifStatement()
         return;
     }
     toks.eat(); // FI
-
-    ssa.resolve_branch(parent, original_right);
 
     isBranchLeft = std::nullopt;
     // add branch if to left if join_block has instructions
@@ -452,4 +454,8 @@ void Parser::relation()
         SYN_EXPECTED("Relation");
         break;
     }
+}
+
+void Parser::generate_dot() const
+{
 }

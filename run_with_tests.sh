@@ -16,17 +16,18 @@ CWD=$(pwd)
 # FILE="tests/complex_tests/while.ty"
 # FILE="tests/complex_tests/while_if.ty"
 # FILE="tests/complex_tests/while_2x.ty"
-FILE="tests/complex_tests/complex.ty"
+# FILE="tests/complex_tests/complex.ty"
+FILE="tests/complex_tests/phi_nesting.ty"
 
 if [ ! -f "$CWD/$FILE" ]; then
     echo "failed to find file: $FILE"
     exit 1
 fi
 
-# RES="$(ctest --test-dir build/tests --output-on-failure -j)\n"
-# if [ $? -eq 0 ]; then
-#     echo "$($CWD/build/bin/ty "$FILE")"
-# else
-#     echo "$RES"
-# fi
-echo "$($CWD/build/bin/ty "$FILE")"
+RES="$(ctest --test-dir build/tests --output-on-failure -j)\n"
+if [ $? -eq 0 ]; then
+    echo "$($CWD/build/bin/ty "$FILE")"
+else
+    echo "$RES"
+fi
+# echo "$($CWD/build/bin/ty "$FILE")"

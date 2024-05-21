@@ -8,7 +8,8 @@ public:
     Parser(TokenList&& toks);
     int parse();
 
-    inline const SSA& get_ssa() { return ssa; }
+    inline const SSA& get_ir() { return ssa; }
+    inline void generate_dot() const { ssa.generate_dot(); }
 
 private:
     TokenList toks;

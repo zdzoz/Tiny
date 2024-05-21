@@ -12,7 +12,8 @@
 #define FUNC_OUTPUT_NUM 1
 #define FUNC_OUTPUT_NL 2
 
-typedef std::vector<std::pair<std::string, std::optional<u64>>> SymbolTableType;
+typedef std::pair<std::string, std::optional<u64>> SymbolType;
+typedef std::vector<SymbolType> SymbolTableType;
 
 enum class InstrType {
     CONST, // const #x define an SSA value for a constant
@@ -43,7 +44,7 @@ enum class InstrType {
 struct Instr {
     u64 pos;
     InstrType type;
-    u64 x, y;
+    std::optional<u64> x, y;
     friend std::ostream& operator<<(std::ostream& os, const Instr& instr);
 };
 
@@ -140,15 +141,18 @@ public:
 
     void clear_stack() { instr_stack = {}; };
 
-    std::deque<JoinNodeType> join_stack;
+    void generate_dot() const;
 
+    std::deque<JoinNodeType> join_stack;
 private:
+    SSA(SSA&) = delete;
     u64 last_instr_pos;
 
     std::stack<u64> instr_stack;
 
     // InputNum, OutputNum, OutputNewLine
     SymbolTableType symbol_table = { { "read", std::nullopt }, { "write", std::nullopt }, { "writeNL", std::nullopt } };
+    const u64 inbuilt_count = symbol_table.size();
 
     void add_to_block(Instr&& instr);
     Instr& add_to_block(Instr&& instr, std::shared_ptr<Block>& b);

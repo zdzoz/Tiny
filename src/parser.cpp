@@ -203,6 +203,7 @@ void Parser::funcCall()
 void Parser::ifStatement()
 {
     toks.eat(); // IF
+    auto dominator = ssa.get_current_block();
 
     relation();
 
@@ -214,6 +215,10 @@ void Parser::ifStatement()
     join.isLeft = std::nullopt;
     ssa.add_symbols_to_block(join);
     ssa.join_stack.emplace_back(std::move(join));
+
+    left->dominator = dominator;
+    right->dominator = dominator;
+    ssa.join_stack.back().node->dominator = dominator;
 
     auto& [join_block, isBranchLeft, idToPhi, _] = ssa.join_stack.back();
     assert(left->parent_left == right->parent_left);
@@ -290,7 +295,6 @@ void Parser::whileStatement()
     join.node = join_block;
     join.isLeft = false;
 
-    ssa.reverse_block();
     auto exit_block = ssa.add_block(false);
     ssa.add_instr(InstrType::NONE);
 
@@ -301,7 +305,10 @@ void Parser::whileStatement()
     join.whileInfo = ssa.get_cmp();
     ssa.join_stack.emplace_back(std::move(join));
     ssa.resolve_branch(join_block, exit_block);
-    ssa.add_block(true);
+    auto loop = ssa.add_block(true);
+
+    loop->dominator = ssa.join_stack.back().node;
+    exit_block->dominator = ssa.join_stack.back().node;
 
     if (toks.get_type() != TokenType::DO) {
         SYN_EXPECTED("DO");
@@ -454,8 +461,4 @@ void Parser::relation()
         SYN_EXPECTED("Relation");
         break;
     }
-}
-
-void Parser::generate_dot() const
-{
 }

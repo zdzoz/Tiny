@@ -57,7 +57,7 @@ class Block {
 
 public:
     // NOTE: maybe add sibling property?
-    std::shared_ptr<Block> left, right, parent_left, parent_right;
+    std::shared_ptr<Block> left, right, parent_left, parent_right, dominator;
 
     Block()
         : block_id(__id++)

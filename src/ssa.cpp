@@ -275,8 +275,61 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
 }
 /// DOT GENERATION ///
 
+// Record:      bb0 [shape=record, label="<b>BB0 | {3: const #0}"]
+// Link:        bb0:s -> bb1:n
+// Dominator:   bb1:b -> bb2:b [color=blue, style=dotted, label="dom"]
+// block = b
+// instr_top = n
+// instr_bot = s
 void SSA::generate_dot() const
 {
+    using namespace std::string_literals;
+
+    constexpr auto record_start = [](u64 block_id) {
+        auto id = std::to_string(block_id);
+        return "bb" + id + "[shape=record, label=\"<b>BB" + id + "| {";
+    };
+    constexpr auto record_end = []() { return "}\"]"; };
+
+    constexpr auto create_link = [](u64 pid, u64 cid, const std::string& label) {
+        return "bb"s + std::to_string(pid) + ":s -> bb" + std::to_string(cid) + ":n" + "[label=\"" + label + "\"]";
+    };
+
+    constexpr auto create_dominator = [](u64 dominator, u64 dominated) {
+        return "bb" + std::to_string(dominator) + ":b -> bb" + std::to_string(dominated) + ":b [color=blue, style=dotted, label=\"dom\"]";
+    };
+
+    std::unordered_set<u64>
+        seen = {};
+    std::function<void(Block*)> p_blocks = [&](const Block* const block) -> void {
+        if (seen.find(block->get_block_id()) != seen.end()) {
+            return;
+        }
+        seen.insert(block->get_block_id());
+
+        std::cout << record_start(block->block_id);
+        for (auto& instr : block->instructions) {
+            std::cout << instr;
+            if (&instr != &block->instructions.back())
+                std::cout << "|";
+        }
+        std::cout << record_end() << std::endl;
+
+        if (block->parent_left)
+            std::cout << create_link(block->parent_left->block_id, block->block_id, "") << std::endl;
+        if (block->parent_right)
+            std::cout << create_link(block->parent_right->block_id, block->block_id, "") << std::endl;
+        if (block->dominator)
+            std::cout << create_dominator(block->dominator->block_id, block->block_id) << std::endl;
+
+        if (block->left)
+            p_blocks(block->left.get());
+        if (block->right)
+            p_blocks(block->right.get());
+    };
+    std::cout << "digraph SSA {\n";
+    p_blocks(this->blocks.get());
+    std::cout << "}\n";
 }
 
 /// PRINTS

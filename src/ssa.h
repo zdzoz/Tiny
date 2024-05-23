@@ -127,6 +127,7 @@ public:
     void add_symbols_to_block(JoinNodeType& join_node);
 
     bool resolve_symbol(const Token* t);
+    void restore_symbol_state();
     void print_symbol_table();
 
     inline void add_stack(u64 val) { instr_stack.push(val); }

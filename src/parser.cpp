@@ -247,6 +247,7 @@ void Parser::ifStatement()
     INFO("[%s] Resolved branch\n", __func__);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
+        ssa.restore_symbol_state();
         INFO("[%s] entering right statSequence\n", __func__);
         statSequence();
         INFO("[%s] exiting right statSequence\n", __func__);

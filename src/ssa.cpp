@@ -246,6 +246,14 @@ bool SSA::resolve_symbol(const Token* t)
     return true;
 }
 
+void SSA::restore_symbol_state() {
+    assert(!join_stack.empty());
+    auto& idToPhi = join_stack.back().idToPhi;
+    for (auto& [id, phi] : idToPhi) {
+        symbol_table[id].second = phi->y;
+    }
+}
+
 void SSA::resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to)
 {
     assert(to->instructions.size() != 0);

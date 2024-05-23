@@ -3,6 +3,8 @@ var x; {
     let x <- call InputNum();
     if x == 1 then
         let x <- x + 1;
+    else
+        call OutputNum(x)
     fi;
     call OutputNum(x)
 }.
@@ -23,6 +25,6 @@ var x; {
 //                                                 │ 4: phi (5) (0)
 //                                                 │ 8: write 4
 //                                 ├ BB3
-//                                 │ 6: none
+//                                 │ 6: write 0
 //                                 └───────────────┐
 //                                                 └ BB4 merged

@@ -45,7 +45,55 @@ struct Instr {
     u64 pos;
     InstrType type;
     std::optional<u64> x, y;
+    bool operator==(const Instr& other) const
+    {
+        return type == other.type && x == other.x && y == other.y;
+    }
+
+    inline bool isHashable() const
+    {
+        switch (this->type) {
+        case InstrType::ADD:
+        case InstrType::SUB:
+        case InstrType::MUL:
+        case InstrType::DIV:
+            return true;
+        case InstrType::PHI:
+        case InstrType::CMP:
+        case InstrType::BRA:
+        case InstrType::BNE:
+        case InstrType::BEQ:
+        case InstrType::BLE:
+        case InstrType::BLT:
+        case InstrType::BGE:
+        case InstrType::BGT:
+        case InstrType::READ:
+        case InstrType::WRITE:
+        case InstrType::WRITENL:
+        case InstrType::END:
+        case InstrType::CONST:
+        case InstrType::NONE:
+        case InstrType::UNKNOWN:
+            break;
+        }
+        return false;
+    }
+
     friend std::ostream& operator<<(std::ostream& os, const Instr& instr);
+};
+
+template <>
+struct std::hash<Instr> {
+    std::size_t operator()(const Instr& instr) const
+    {
+        using std::hash;
+        using std::size_t;
+        using std::string;
+
+        assert(instr.isHashable());
+
+        return ((hash<int>()((int)instr.type) >> 1) ^ (hash<std::optional<u64>>()(instr.x) ^ hash<std::optional<u64>>()(instr.y)));
+    }
 };
 
 class SSA;
@@ -86,7 +134,6 @@ public:
     inline Instr& front() { return instructions.front(); }
     inline Instr& back() { return instructions.back(); }
     inline void pop_back() { instructions.pop_back(); }
-
 
 private:
     std::deque<Instr> instructions;
@@ -160,7 +207,9 @@ private:
     SymbolTableType symbol_table = { { "read", std::nullopt }, { "write", std::nullopt }, { "writeNL", std::nullopt } };
     const u64 inbuilt_count = symbol_table.size();
 
-    void add_to_block(Instr&& instr);
+    std::unordered_map<Instr, u64> expressions;
+
+    void add_to_block(Instr instr);
     Instr& add_to_block(Instr&& instr, std::shared_ptr<Block>& b);
 
     static u64 instruction_num;

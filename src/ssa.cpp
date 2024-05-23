@@ -126,14 +126,24 @@ void SSA::add_instr(InstrType type)
         ERROR("Unknown InstrType\n");
         exit(1);
     }
+
+    if (instr->isHashable() && expressions.find(*instr) != expressions.end()) {
+        last_instr_pos = expressions[*instr];
+        instr->type = InstrType::NONE;
+        return;
+    }
+
     if (!none)
-        add_to_block(std::move(__instr));
+        add_to_block(__instr);
     else {
         last_instr_pos = instr->pos;
     }
+
+    if (instr->isHashable())
+        expressions[*instr] = get_last_pos();
 }
 
-void SSA::add_to_block(Instr&& instr)
+void SSA::add_to_block(Instr instr)
 {
     instr.pos = instruction_num++;
     last_instr_pos = instr.pos;
@@ -287,36 +297,29 @@ void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
     }
 }
 
-// TODO: maybe useful for CSE
-// void SSA::propagate_changes(Block* start, u64 from, u64 to) {
-        // for (auto& instr : start->instructions) {
-        //     if (instr.x == from) {
-        //         instr.x = to;
-        //     }
-        //     if (instr.y == from) {
-        //         instr.y = to;
-        //     }
-        // }
-        //
-        // if (start->left) {
-        //     propagate_changes(start->left.get(), from, to);
-        // }
-        // if (start->right) {
-        //     propagate_changes(start->right.get(), from, to);
-        // }
-//
-// }
-
 // if phi.x == phi.y should resolve to phi.x and phi.x should be propogated until left and right nullptr update outer too
 void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
 {
-    std::function<void(Block*, u64, u64)> propagate_changes = [&propagate_changes](Block* start, u64 from, u64 to) {
-        for (auto& instr : start->instructions) {
-            if (instr.x == from) {
-                instr.x = to;
-            }
-            if (instr.y == from) {
-                instr.y = to;
+    std::vector<u64> erase_queue;
+    std::vector<std::deque<Instr>::iterator> erase_queue2;
+
+    std::function<void(Block*, u64, u64)> propagate_changes = [&](Block* start, u64 from, u64 to) {
+        for (auto it = start->instructions.begin(); it != start->instructions.end(); ++it) {
+            // for (auto& instr : start->instructions) {
+            auto& instr = *it;
+            if (instr.pos == from)
+                continue;
+            if (instr.x == from || instr.y == from) {
+                if (instr.x == from) {
+                    instr.x = to;
+                }
+                if (instr.y == from) {
+                    instr.y = to;
+                }
+                if (instr.isHashable() && expressions.find(instr) != expressions.end()) {
+                    propagate_changes(blocks.get(), instr.pos, expressions[instr]);
+                    start->instructions.erase(it);
+                }
             }
         }
 
@@ -328,8 +331,6 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
         }
     };
 
-    std::vector<u64> erase_queue;
-    std::vector<std::deque<Instr>::iterator> erase_queue2;
     for (auto& [id, phi] : idToPhi) {
         // check for cyclic reference
         if (phi->pos == phi->y) {

@@ -18,6 +18,6 @@ TEST_P(ComplexParserTestSuite, Files)
     EXPECT_EQ(errors, 0);
 }
 
-INSTANTIATE_TEST_SUITE_P(ParserSuite, ComplexParserTestSuite, testing::ValuesIn(getFiles(INTERMEDIATE_TESTS)));
+INSTANTIATE_TEST_SUITE_P(ParserSuite, ComplexParserTestSuite, testing::ValuesIn(getFiles(COMPLEX_TESTS)));
 
 #endif

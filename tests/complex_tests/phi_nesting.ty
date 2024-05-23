@@ -28,5 +28,5 @@ var x,k,j,m; {
         call OutputNum(k);
     od;
     call OutputNum(x);
-    call OutputNum(k);
+    call OutputNum(k)
 }.

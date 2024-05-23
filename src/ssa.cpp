@@ -287,16 +287,88 @@ void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
     }
 }
 
+// TODO: maybe useful for CSE
+// void SSA::propagate_changes(Block* start, u64 from, u64 to) {
+        // for (auto& instr : start->instructions) {
+        //     if (instr.x == from) {
+        //         instr.x = to;
+        //     }
+        //     if (instr.y == from) {
+        //         instr.y = to;
+        //     }
+        // }
+        //
+        // if (start->left) {
+        //     propagate_changes(start->left.get(), from, to);
+        // }
+        // if (start->right) {
+        //     propagate_changes(start->right.get(), from, to);
+        // }
+//
+// }
+
+// if phi.x == phi.y should resolve to phi.x and phi.x should be propogated until left and right nullptr update outer too
 void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
 {
+    std::function<void(Block*, u64, u64)> propagate_changes = [&propagate_changes](Block* start, u64 from, u64 to) {
+        for (auto& instr : start->instructions) {
+            if (instr.x == from) {
+                instr.x = to;
+            }
+            if (instr.y == from) {
+                instr.y = to;
+            }
+        }
+
+        if (start->left) {
+            propagate_changes(start->left.get(), from, to);
+        }
+        if (start->right) {
+            propagate_changes(start->right.get(), from, to);
+        }
+    };
+
+    std::vector<u64> erase_queue;
+    std::vector<std::deque<Instr>::iterator> erase_queue2;
+    for (auto& [id, phi] : idToPhi) {
+        // check for cyclic reference
+        if (phi->pos == phi->y) {
+            phi->y = phi->x;
+        } else if (phi->pos == phi->x) {
+            phi->x = phi->y;
+        }
+
+        if (phi->x == phi->y) {
+            auto& instrs = join_stack.back().node->instructions;
+            propagate_changes(join_stack.back().node.get(), phi->pos, phi->x.value());
+            symbol_table[id].second = phi->x; // update symbol table
+            erase_queue.emplace_back(id);
+            // remove instruction from block
+            for (auto it = instrs.begin(); it != instrs.end(); ++it) {
+                if (phi->pos == it->pos) {
+                    INFO("ERASING: %s == %llu\n", symbol_table[id].first.c_str(), phi->pos);
+                    erase_queue2.push_back(it);
+                    break;
+                }
+            }
+        }
+    }
+
+    for (auto& e : erase_queue)
+        idToPhi.erase(e);
+
     if (join_stack.size() > 1) {
         auto& outer = join_stack[join_stack.size() - 2];
         for (auto& i : idToPhi) {
             if (outer.idToPhi.find(i.first) != outer.idToPhi.end()) {
+                INFO("Setting %llu to %llu\n", outer.idToPhi[i.first]->y.value(), i.second->pos);
                 outer.idToPhi[i.first]->y = i.second->pos;
             }
         }
     }
+
+    for (auto& e : erase_queue2)
+        join_stack.back().node->instructions.erase(e);
 }
 
 /// DOT GENERATION ///

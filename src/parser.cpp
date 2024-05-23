@@ -242,9 +242,6 @@ void Parser::ifStatement()
     auto original_right = right;
     ssa.set_current_block(right);
     ssa.add_instr(InstrType::NONE);
-    INFO("[%s] Resolving branch\n", __func__);
-    ssa.resolve_branch(parent, original_right);
-    INFO("[%s] Resolved branch\n", __func__);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
         ssa.restore_symbol_state();
@@ -283,6 +280,8 @@ void Parser::ifStatement()
     ssa.resolve_phi(idToPhi);
     ssa.commit_phi(idToPhi);
 
+    ssa.resolve_branch(parent, original_right);
+
     ssa.join_stack.pop_back();
 }
 
@@ -310,7 +309,6 @@ void Parser::whileStatement()
     join.whileInfo = ssa.get_cmp();
     ssa.join_stack.emplace_back(std::move(join));
     auto& join_block = ssa.join_stack.back().node;
-    ssa.resolve_branch(join_block, exit_block);
     auto loop = ssa.add_block(true);
 
     loop->dominator = ssa.join_stack.back().node;
@@ -336,6 +334,8 @@ void Parser::whileStatement()
 
     ssa.resolve_phi(ssa.join_stack.back().idToPhi);
     ssa.commit_phi(ssa.join_stack.back().idToPhi);
+
+    ssa.resolve_branch(join_block, exit_block);
 
     ssa.join_stack.pop_back();
 }

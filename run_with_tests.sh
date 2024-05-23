@@ -15,10 +15,10 @@ CWD=$(pwd)
 # FILE="tests/intermediate_tests/if3.ty"
 # FILE="tests/intermediate_tests/phi_propagate.ty"
 # FILE="tests/intermediate_tests/prof_basic.ty"
-FILE="tests/complex_tests/while.ty"
+# FILE="tests/complex_tests/while.ty"
 # FILE="tests/complex_tests/while_if.ty"
 # FILE="tests/complex_tests/while_2x.ty"
-# FILE="tests/complex_tests/complex.ty"
+FILE="tests/complex_tests/complex.ty"
 # FILE="tests/complex_tests/phi_nesting.ty"
 
 if [ ! -f "$CWD/$FILE" ]; then

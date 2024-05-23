@@ -82,13 +82,16 @@ public:
     void print_with_indent(std::ostream& os, u64 indent) const;
 
     inline bool empty() { return instructions.empty(); }
+    inline size_t size() { return instructions.size(); }
     inline Instr& front() { return instructions.front(); }
     inline Instr& back() { return instructions.back(); }
     inline void pop_back() { instructions.pop_back(); }
 
+
 private:
-    // NOTE: maybe change to std::deque instead of vector (allows references to items)
     std::deque<Instr> instructions;
+
+    // NOTE: std::deque instead of vector (allows references to items)
     friend std::ostream& operator<<(std::ostream& os, const Block& b);
 };
 
@@ -133,17 +136,19 @@ public:
     void commit_phi(std::unordered_map<u64, Instr*>& idToPhi);
 
     inline u64 get_last_pos() const { return last_instr_pos; }
-    inline Instr* get_cmp() {
+    inline Instr* get_cmp()
+    {
         Instr* cmp = &get_current_block()->instructions[get_current_block()->instructions.size() - 2];
         assert(cmp->type == InstrType::CMP);
         return cmp;
     }
 
-    void clear_stack() { instr_stack = {}; };
+    inline void clear_stack() { instr_stack = {}; };
 
     void generate_dot() const;
 
     std::deque<JoinNodeType> join_stack;
+
 private:
     SSA(SSA&) = delete;
     u64 last_instr_pos;

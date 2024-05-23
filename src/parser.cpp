@@ -290,20 +290,26 @@ void Parser::whileStatement()
 {
     toks.eat(); // while
 
-    auto join_block = ssa.add_block(true);
     JoinNodeType join = {};
-    join.node = join_block;
     join.isLeft = false;
+
+    if (ssa.get_current_block()->size() == 1 && ssa.get_current_block()->back().type == InstrType::NONE) {
+        join.node = ssa.get_current_block();
+        join.node->pop_back(); // remove none
+    } else {
+        join.node = ssa.add_block(true);
+    }
 
     auto exit_block = ssa.add_block(false);
     ssa.add_instr(InstrType::NONE);
 
-    ssa.set_current_block(join_block);
+    ssa.set_current_block(join.node);
     ssa.add_symbols_to_block(join);
     ssa.resolve_phi(join.idToPhi);
     relation();
     join.whileInfo = ssa.get_cmp();
     ssa.join_stack.emplace_back(std::move(join));
+    auto& join_block = ssa.join_stack.back().node;
     ssa.resolve_branch(join_block, exit_block);
     auto loop = ssa.add_block(true);
 

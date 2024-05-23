@@ -56,12 +56,28 @@ void SSA::add_const(u64 val)
     add_stack(val_to_pos[val]);
 }
 
+static bool isBranch(InstrType type)
+{
+    switch (type) {
+    case InstrType::BNE:
+    case InstrType::BEQ:
+    case InstrType::BLE:
+    case InstrType::BLT:
+    case InstrType::BGT:
+    case InstrType::BGE:
+        return true;
+    default:
+        break;
+    }
+    return false;
+}
+
 void SSA::add_instr(InstrType type)
 {
     Instr __instr;
     Instr* instr = &__instr;
     bool none = false;
-    if (!get_current_block()->empty() && get_current_block()->back().type == InstrType::NONE) {
+    if (!isBranch(type) && !get_current_block()->empty() && get_current_block()->back().type == InstrType::NONE) {
         instr = &get_current_block()->back();
         none = true;
     }
@@ -246,7 +262,8 @@ bool SSA::resolve_symbol(const Token* t)
     return true;
 }
 
-void SSA::restore_symbol_state() {
+void SSA::restore_symbol_state()
+{
     assert(!join_stack.empty());
     auto& idToPhi = join_stack.back().idToPhi;
     for (auto& [id, phi] : idToPhi) {

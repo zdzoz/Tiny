@@ -296,7 +296,6 @@ void Parser::whileStatement()
 
     if (ssa.get_current_block()->size() == 1 && ssa.get_current_block()->back().type == InstrType::NONE) {
         join.node = ssa.get_current_block();
-        join.node->pop_back(); // remove none
     } else {
         join.node = ssa.add_block(true);
     }

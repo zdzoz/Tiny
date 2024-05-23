@@ -1,0 +1,8 @@
+main
+var k; {
+    let k <- 1;
+    if k > 5 then
+        call OutputNum(k);
+    fi;
+    call OutputNum(k);
+}.

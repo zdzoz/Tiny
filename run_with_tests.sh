@@ -18,8 +18,12 @@ CWD=$(pwd)
 # FILE="tests/complex_tests/while.ty"
 # FILE="tests/complex_tests/while_if.ty"
 # FILE="tests/complex_tests/while_2x.ty"
-FILE="tests/complex_tests/complex.ty"
+# FILE="tests/complex_tests/complex.ty"
 # FILE="tests/complex_tests/phi_nesting.ty"
+# FILE="tests/complex_tests/simple_func.ty"
+# FILE="tests/complex_tests/simple_func2.ty"
+# FILE="tests/complex_tests/add_func.ty"
+FILE="tests/complex_tests/fibonacci.ty"
 
 if [ ! -f "$CWD/$FILE" ]; then
     echo "failed to find file: $FILE"

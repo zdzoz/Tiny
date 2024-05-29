@@ -33,6 +33,8 @@ enum class TokenType {
     // KEYWORDS
     MAIN,
     CALL,
+    VOID,
+    FUNC,
     RET,
     LET,
     VAR,
@@ -79,6 +81,8 @@ enum class TokenType {
 const std::vector<std::string> token_str = {
     "MAIN",
     "CALL",
+    "VOID",
+    "FUNCTION",
     "RETURN",
     "LET",
     "VAR",

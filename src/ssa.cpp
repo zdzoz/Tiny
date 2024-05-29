@@ -1,7 +1,6 @@
 #include "ssa.h"
 #include "token.h"
 
-#include <iostream>
 #include <ostream>
 
 u64 Block::__id = 0;
@@ -108,14 +107,34 @@ void SSA::add_instr(InstrType type)
     case InstrType::READ: // no opts
         break;
     case InstrType::WRITE: {
+        assert(instr_stack.size() >= 1 && "Not enough options");
         instr->x = instr_stack.top();
         instr_stack.pop();
     } break;
     case InstrType::WRITENL: // no opts
         break;
+    case InstrType::SETP:
+        assert(instr_stack.size() >= 2 && "Not enough options");
+        instr->x = instr_stack.top(); // val
+        instr_stack.pop();
+        instr->y = instr_stack.top(); // specifies which param
+        instr_stack.pop();
+        break;
+    case InstrType::JUMP:
+    case InstrType::RET:
+        assert(instr_stack.size() >= 1 && "Not enough options");
+        instr->x = instr_stack.top();
+        instr_stack.pop();
+        break;
+    case InstrType::GETP:
+        assert(instr_stack.size() >= 1 && "Not enough options");
+        instr->y = instr_stack.top(); // y is used to specify which param
+        instr_stack.pop();
+        break;
     case InstrType::NONE:
         break;
     case InstrType::BRA: { // bra y branch to y
+        assert(instr_stack.size() == 1 && "Not enough options");
         instr->y = instr_stack.top();
         instr_stack.pop();
     } break;
@@ -160,14 +179,13 @@ Instr& SSA::add_to_block(Instr&& instr, std::shared_ptr<Block>& join_block)
 
 void SSA::add_symbols(SymbolTableType&& v)
 {
-    symbol_table.reserve(symbol_table.size() + v.size());
-    symbol_table.insert(symbol_table.end(), v.begin(), v.end());
+    symbol_table.insert(v.begin(), v.end());
     INFO("symbol_table size %zu\n", symbol_table.size());
 }
 
 void SSA::set_symbol(const Token* t)
 {
-    if (*t->val() >= symbol_table.size()) {
+    if (symbol_table.find(*t->val()) == symbol_table.end()) {
         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
         exit(1);
     }
@@ -223,6 +241,8 @@ void SSA::set_symbol(const Token* t)
 void SSA::add_symbols_to_block(JoinNodeType& join_node)
 {
     for (u64 i = inbuilt_count; i < symbol_table.size(); ++i) {
+        if (symbol_table.find(i) == symbol_table.end())
+            continue;
         auto& s = symbol_table[i];
 
         Instr p = {};
@@ -234,10 +254,10 @@ void SSA::add_symbols_to_block(JoinNodeType& join_node)
 }
 
 // resolves symbol and adds to option stack
-// for functions returns true to indicate user created symbol (func)
-bool SSA::resolve_symbol(const Token* t)
+// for functions returns true if isVoid
+bool SSA::resolve_symbol(const Token* t, const FunctionMap& functionMap)
 {
-    if (*t->val() >= symbol_table.size()) {
+    if (symbol_table.find(*t->val()) == symbol_table.end()) {
         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
         exit(1);
     }
@@ -247,23 +267,22 @@ bool SSA::resolve_symbol(const Token* t)
     case FUNC_INPUT_NUM: // no opt
         add_instr(InstrType::READ);
         add_stack(get_last_pos());
-        return false;
+        return false; // is not void
     case FUNC_OUTPUT_NUM: // has opt
         add_instr(InstrType::WRITE);
         add_stack(get_last_pos());
-        return false;
+        return true;
     case FUNC_OUTPUT_NL: // no opt
         add_instr(InstrType::WRITENL);
         add_stack(get_last_pos());
-        return false;
+        return true;
     default:
-        const auto& [_, val] = symbol_table[*t->val()];
+        auto& [_, val] = symbol_table[*t->val()];
         if (val.has_value()) {
-            opt = *symbol_table[*t->val()].second;
+            opt = val.value();
         } else {
             add_const(0);
-            auto& [_, sval] = symbol_table[*t->val()];
-            sval = 0;
+            val = 0;
             WARN("uninitialized symbol '%s'\n", t->id().c_str());
             opt = 0;
         }
@@ -347,7 +366,7 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
             // remove instruction from block
             for (auto it = instrs.begin(); it != instrs.end(); ++it) {
                 if (phi->pos == it->pos) {
-                    INFO("ERASING: %s == %llu\n", symbol_table[id].first.c_str(), phi->pos);
+                    INFO("ERASING %s == %llu\n", symbol_table[id].first.c_str(), phi->pos);
                     erase_queue2.push_back(it);
                     break;
                 }
@@ -439,7 +458,7 @@ void SSA::generate_dot() const
         if (block->right)
             p_blocks(block->right.get());
     };
-    std::cout << "digraph SSA {\n";
+    std::cout << "digraph " << this->name << " {\n";
     p_blocks(this->blocks.get());
     std::cout << "}\n";
 }
@@ -450,15 +469,14 @@ void SSA::print_symbol_table()
 {
     std::cerr << "Instruction Stack Size: " << instr_stack.size() << std::endl;
     std::cerr << "Inbuilt symbols: " << inbuilt_count << std::endl;
-    std::cerr << "Symbol Table:" << std::endl;
-    u64 i = 0;
-    for (const auto& [symbol, e] : symbol_table) {
-        std::cerr << "\t[" << i << "] " << std::left << std::setw(10) << symbol << " ";
-        if (e)
-            std::cerr << *e << std::endl;
+    std::cerr << "Total symbols: " << symbol_table.size() << std::endl;
+    std::cerr << "Symbol Table (" << this->name << "):" << std::endl;
+    for (const auto& [key, val] : symbol_table) {
+        std::cerr << "\t[" << key << "] " << std::left << std::setw(10) << val.first << " ";
+        if (val.second)
+            std::cerr << *val.second << std::endl;
         else
             std::cerr << "Unset" << std::endl;
-        i++;
     }
     std::cerr << std::endl;
 }
@@ -581,6 +599,18 @@ std::ostream& operator<<(std::ostream& os, const Instr& instr)
         break;
     case InstrType::READ:
         os << "read";
+        break;
+    case InstrType::GETP:
+        os << "getpar" << *instr.y;
+        break;
+    case InstrType::SETP:
+        os << "setpar" << *instr.y << " " << *instr.x;
+        break;
+    case InstrType::JUMP:
+        os << "jsr " << *instr.x;
+        break;
+    case InstrType::RET:
+        os << "ret " << (int64_t)*instr.x;
         break;
     case InstrType::NONE:
         os << "none";

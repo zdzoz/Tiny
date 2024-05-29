@@ -129,6 +129,10 @@ bool TokenList::__tokenize(std::istream& is)
                     type = TokenType::MAIN;
                 } else if (id == "call") {
                     type = TokenType::CALL;
+                } else if (id == "void") {
+                    type = TokenType::VOID;
+                } else if (id == "function") {
+                    type = TokenType::FUNC;
                 } else if (id == "return") {
                     type = TokenType::RET;
                 } else if (id == "let") {

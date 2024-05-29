@@ -1,0 +1,13 @@
+main
+
+var x;
+
+function add(a, b);
+{
+    return a + b
+};
+
+{
+    let x <- call add(1, 2);
+    call OutputNum(x)
+}.

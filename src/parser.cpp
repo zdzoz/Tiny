@@ -14,7 +14,10 @@
 
 Parser::Parser(TokenList&& toks)
     : toks(std::move(toks))
+    , ssa_stack(1)
 {
+    assert(ssa_stack.size() == 1);
+    ssa = &ssa_stack.back();
 }
 
 // NOTE:
@@ -37,7 +40,8 @@ int Parser::parse()
     if (toks.get_type() == TokenType::VAR)
         varDecl();
 
-    // TODO: { funcDecl }
+    if (toks.get_type() == TokenType::VOID || toks.get_type() == TokenType::FUNC)
+        funcDecl();
 
     // "{"
     if (toks.get_type() != TokenType::LBRACE)
@@ -74,9 +78,8 @@ void Parser::varDecl()
     toks.eat();
 
     SymbolTableType symbols;
-    // u64 num_symbols = 0;
     while (toks.get_type() == TokenType::ID) {
-        symbols.push_back({ toks.get()->id(), {} });
+        symbols[*toks.get()->val()] = { toks.get()->id(), std::nullopt };
         toks.eat(); // eat id
 
         TokenType typ = toks.get_type();
@@ -87,7 +90,7 @@ void Parser::varDecl()
         }
         toks.eat();
     }
-    ssa.add_symbols(std::move(symbols));
+    ssa->add_symbols(std::move(symbols));
 
     if (toks.get_type() != TokenType::SEMI) {
         SYN_EXPECTED("SEMI");
@@ -96,27 +99,145 @@ void Parser::varDecl()
     toks.eat();
 }
 
+// funcDecl = [ “void” ] “function” ident formalParam “;” funcBody “;” .
+void Parser::funcDecl()
+{
+    bool isVoid = false;
+    if (toks.get_type() == TokenType::VOID) {
+        isVoid = true;
+        toks.eat(); // eat void
+    }
+
+    if (toks.get_type() != TokenType::FUNC) {
+        SYN_EXPECTED("FUNC");
+        return;
+    }
+    toks.eat(); // eat func
+
+    if (toks.get_type() != TokenType::ID) {
+        SYN_EXPECTED("ID");
+        return;
+    }
+
+    auto& s = add_ssa(); // create function ssa
+    s.add_instr(InstrType::NONE); // add temp instr
+
+    assert(toks.get()->val() != std::nullopt);
+    s.name = toks.get()->id();
+    functionMap[*toks.get()->val()].pos = s.get_first_instr();
+    functionMap[*toks.get()->val()].isVoid = isVoid;
+    auto& paramCount = functionMap[*toks.get()->val()].paramCount;
+    paramCount = 0;
+
+    // swap to function ssa
+    ssa = &s;
+
+    toks.eat(); // eat id
+
+    // formalParam = “(“ [ident { “,” ident }] “)”
+    if (toks.get_type() != TokenType::LPAREN) {
+        SYN_EXPECTED("LPAREN");
+        return;
+    }
+    toks.eat(); // lparen
+
+    // get params
+    SymbolTableType symbols;
+    while (toks.get_type() == TokenType::ID) {
+        ssa->add_stack(paramCount + 1);
+        ssa->add_instr(InstrType::GETP);
+
+        symbols[*toks.get()->val()] = { toks.get()->id(), ssa->get_last_pos() };
+        paramCount++;
+
+        toks.eat(); // eat id
+        if (toks.get_type() != TokenType::COMMA)
+            break;
+        toks.eat(); // eat comma
+    }
+    ssa->add_symbols(std::move(symbols));
+
+    if (toks.get_type() != TokenType::RPAREN) {
+        SYN_EXPECTED("RPAREN");
+        return;
+    }
+    toks.eat(); // eat rparen
+
+    if (toks.get_type() != TokenType::SEMI) {
+        SYN_EXPECTED("SEMI");
+        return;
+    }
+    toks.eat(); // eat semi
+
+    funcBody();
+
+    if (toks.get_type() != TokenType::SEMI) {
+        SYN_EXPECTED("SEMI");
+        return;
+    }
+    toks.eat();
+
+    if (ssa->get_last_instr().type != InstrType::RET) {
+        if (!isVoid)
+            WARN("Missing explicit return\n");
+        ssa->add_stack(-1);
+        ssa->add_instr(InstrType::RET);
+    }
+
+    // swap back to main ssa
+    ssa = &ssa_stack[0];
+}
+
+// funcBody = [ varDecl ] “{” [ statSequence ] “}”
+void Parser::funcBody()
+{
+    // [ varDecl ]
+    if (toks.get_type() == TokenType::VAR)
+        varDecl();
+
+    // "{"
+    if (toks.get_type() != TokenType::LBRACE) {
+        SYN_EXPECTED("LBRACE");
+        return;
+    }
+    toks.eat();
+
+    // make statSequence optional
+    statSequence();
+
+    // }
+    if (toks.get_type() != TokenType::RBRACE) {
+        SYN_EXPECTED("RBRACE");
+        return;
+    }
+    toks.eat();
+}
+
 void Parser::statSequence()
 {
+    bool wasReturn = false;
     do {
-        statement();
+        wasReturn = statement();
         if (toks.get_type() == TokenType::SEMI)
             toks.eat();
         else
             break;
-    } while (1);
+    } while (!wasReturn);
 }
 
 // statement = assignment | funcCall | ifStatement | whileStatement | returnStatement
-void Parser::statement()
+bool Parser::statement()
 {
     switch (toks.get_type()) {
     case TokenType::LET:
         assignment();
         break;
     case TokenType::CALL:
-        funcCall();
-        ssa.clear_stack();
+        if (!funcCall()) {
+            ERROR("Expected void function\n");
+            exit(1);
+        }
+        ssa->clear_stack();
         break;
     case TokenType::IF:
         ifStatement();
@@ -126,10 +247,12 @@ void Parser::statement()
         break;
     case TokenType::RET:
         returnStatement();
+        return true;
         break;
     default:
         break;
     }
+    return false;
 }
 
 /// STATEMENTS ///
@@ -157,15 +280,15 @@ void Parser::assignment()
 
     expression();
 
-    ssa.set_symbol(tok);
+    ssa->set_symbol(tok);
 
     // add placeholder if current is empty
-    if (ssa.get_current_block()->empty())
-        ssa.add_instr(InstrType::NONE);
+    if (ssa->get_current_block()->empty())
+        ssa->add_instr(InstrType::NONE);
 }
 
-// funcCall = “call” ident [2 “(“ [expression { “,” expression } ] “)” ]
-void Parser::funcCall()
+// funcCall = “call” ident [ “(“ [expression { “,” expression } ] “)” ]
+bool Parser::funcCall()
 {
     toks.eat(); // eat CALL
 
@@ -175,27 +298,48 @@ void Parser::funcCall()
     auto val = toks.get();
     toks.eat(); // ID
 
+    std::vector<u64> args;
     if (toks.get_type() == TokenType::LPAREN) {
         toks.eat(); // LPAREN
-
-        // args
         do {
             expression();
+            args.push_back(ssa->get_last_pos());
             if (toks.get_type() == TokenType::COMMA) {
                 toks.eat(); // COMMA
                 if (toks.get_type() == TokenType::RPAREN) {
                     SYN_EXPECTED("Expression");
-                    return;
+                    return false;
                 }
             }
         } while (toks.get_type() != TokenType::RPAREN);
         toks.eat(); // RPAREN
     }
 
-    // FIX: resolve function (add user functions)
-    if (ssa.resolve_symbol(val)) {
-        // USER DEFINED FUNCTION
-        // ssa.add_instr(); // TODO: Jump
+    // USER DEFINED FUNCTION
+    if (functionMap.find(*val->val()) != functionMap.end()) {
+        auto& [jmp_pos, paramCount, isVoid] = functionMap.at(*val->val());
+        if (paramCount != args.size()) {
+            SYN_ERROR("Expected %llu arguments but only got %zu\n", paramCount, args.size());
+            exit(1);
+        }
+
+        // set params
+        u64 arg_num = 0;
+        for (auto& e : args) {
+            ssa->add_stack(++arg_num); // param num
+            ssa->add_stack(e); // pos
+            ssa->add_instr(InstrType::SETP);
+            ssa->pop_stack(); // remove option generated in arg loop
+        }
+
+        // jmp
+        ssa->add_stack(jmp_pos);
+        ssa->add_instr(InstrType::JUMP);
+        ssa->add_stack(ssa->get_last_pos());
+        INFO("Function (%s) is %s\n", val->id().c_str(), (isVoid ? "void" : "non-void"));
+        return isVoid;
+    } else {
+        return ssa->resolve_symbol(val, functionMap);
     }
 }
 
@@ -203,24 +347,24 @@ void Parser::funcCall()
 void Parser::ifStatement()
 {
     toks.eat(); // IF
-    auto dominator = ssa.get_current_block();
+    auto dominator = ssa->get_current_block();
 
     relation();
 
-    auto left = ssa.add_block(true);
-    ssa.reverse_block();
-    auto right = ssa.add_block(false);
+    auto left = ssa->add_block(true);
+    ssa->reverse_block();
+    auto right = ssa->add_block(false);
     JoinNodeType join = {};
     join.node = std::make_shared<Block>();
     join.isLeft = std::nullopt;
-    ssa.add_symbols_to_block(join);
-    ssa.join_stack.emplace_back(std::move(join));
+    ssa->add_symbols_to_block(join); // FIX: adding nonexistent to symbol table?
+    ssa->join_stack.emplace_back(std::move(join));
 
     left->dominator = dominator;
     right->dominator = dominator;
-    ssa.join_stack.back().node->dominator = dominator;
+    ssa->join_stack.back().node->dominator = dominator;
 
-    auto& [join_block, isBranchLeft, idToPhi, _] = ssa.join_stack.back();
+    auto& [join_block, isBranchLeft, idToPhi, _] = ssa->join_stack.back();
     assert(left->parent_left == right->parent_left);
     auto parent = left->parent_left;
 
@@ -230,27 +374,27 @@ void Parser::ifStatement()
     }
     toks.eat(); // then
 
-    ssa.set_current_block(left);
+    ssa->set_current_block(left);
     isBranchLeft = true;
 
     INFO("[%s] entering left statSequence\n", __func__);
     statSequence();
     INFO("[%s] exiting left statSequence\n", __func__);
-    left = ssa.get_current_block();
+    left = ssa->get_current_block();
 
     isBranchLeft = false;
     auto original_right = right;
-    ssa.set_current_block(right);
-    ssa.add_instr(InstrType::NONE);
+    ssa->set_current_block(right);
+    ssa->add_instr(InstrType::NONE);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
-        ssa.restore_symbol_state();
+        ssa->restore_symbol_state();
         INFO("[%s] entering right statSequence\n", __func__);
         statSequence();
         INFO("[%s] exiting right statSequence\n", __func__);
-        right = ssa.get_current_block();
+        right = ssa->get_current_block();
     } else {
-        ssa.add_instr(InstrType::NONE);
+        ssa->add_instr(InstrType::NONE);
     }
 
     if (toks.get_type() != TokenType::FI) {
@@ -262,11 +406,11 @@ void Parser::ifStatement()
     isBranchLeft = std::nullopt;
     // add branch if to left if join_block has instructions
     if (!join_block->empty()) {
-        auto current = ssa.get_current_block();
-        ssa.set_current_block(left);
-        ssa.add_stack(join_block->front().pos);
-        ssa.add_instr(InstrType::BRA);
-        ssa.set_current_block(current);
+        auto current = ssa->get_current_block();
+        ssa->set_current_block(left);
+        ssa->add_stack(join_block->front().pos);
+        ssa->add_instr(InstrType::BRA);
+        ssa->set_current_block(current);
     }
 
     // join
@@ -275,14 +419,14 @@ void Parser::ifStatement()
     left->right = join_block;
     right->left = join_block;
 
-    ssa.set_current_block(join_block);
+    ssa->set_current_block(join_block);
 
-    ssa.resolve_phi(idToPhi);
-    ssa.commit_phi(idToPhi);
+    ssa->resolve_phi(idToPhi);
+    ssa->commit_phi(idToPhi);
 
-    ssa.resolve_branch(parent, original_right);
+    ssa->resolve_branch(parent, original_right);
 
-    ssa.join_stack.pop_back();
+    ssa->join_stack.pop_back();
 }
 
 // while = “while” relation “do” StatSequence “od”
@@ -293,26 +437,26 @@ void Parser::whileStatement()
     JoinNodeType join = {};
     join.isLeft = false;
 
-    if (ssa.get_current_block()->size() == 1 && ssa.get_current_block()->back().type == InstrType::NONE) {
-        join.node = ssa.get_current_block();
+    if (ssa->get_current_block()->size() == 1 && ssa->get_current_block()->back().type == InstrType::NONE) {
+        join.node = ssa->get_current_block();
     } else {
-        join.node = ssa.add_block(true);
+        join.node = ssa->add_block(true);
     }
 
-    auto exit_block = ssa.add_block(false);
-    ssa.add_instr(InstrType::NONE);
+    auto exit_block = ssa->add_block(false);
+    ssa->add_instr(InstrType::NONE);
 
-    ssa.set_current_block(join.node);
-    ssa.add_symbols_to_block(join);
-    ssa.resolve_phi(join.idToPhi);
+    ssa->set_current_block(join.node);
+    ssa->add_symbols_to_block(join);
+    ssa->resolve_phi(join.idToPhi);
     relation();
-    join.whileInfo = ssa.get_cmp();
-    ssa.join_stack.emplace_back(std::move(join));
-    auto& join_block = ssa.join_stack.back().node;
-    auto loop = ssa.add_block(true);
+    join.whileInfo = ssa->get_cmp();
+    ssa->join_stack.emplace_back(std::move(join));
+    auto& join_block = ssa->join_stack.back().node;
+    auto loop = ssa->add_block(true);
 
-    loop->dominator = ssa.join_stack.back().node;
-    exit_block->dominator = ssa.join_stack.back().node;
+    loop->dominator = ssa->join_stack.back().node;
+    exit_block->dominator = ssa->join_stack.back().node;
 
     if (toks.get_type() != TokenType::DO) {
         SYN_EXPECTED("DO");
@@ -321,29 +465,37 @@ void Parser::whileStatement()
     toks.eat();
 
     statSequence();
-    auto end_block = ssa.get_current_block();
+    auto end_block = ssa->get_current_block();
     end_block->entry = join_block;
-    ssa.add_stack(join_block->front().pos);
-    ssa.add_instr(InstrType::BRA);
+    ssa->add_stack(join_block->front().pos);
+    ssa->add_instr(InstrType::BRA);
 
     if (toks.get_type() != TokenType::OD) {
         SYN_EXPECTED("OD");
     } else
         toks.eat();
-    ssa.set_current_block(exit_block);
+    ssa->set_current_block(exit_block);
 
-    ssa.resolve_phi(ssa.join_stack.back().idToPhi);
-    ssa.commit_phi(ssa.join_stack.back().idToPhi);
+    ssa->resolve_phi(ssa->join_stack.back().idToPhi);
+    ssa->commit_phi(ssa->join_stack.back().idToPhi);
 
-    ssa.resolve_branch(join_block, exit_block);
+    ssa->resolve_branch(join_block, exit_block);
 
-    ssa.join_stack.pop_back();
+    ssa->join_stack.pop_back();
 }
 
-// FIX: return
+// return
 void Parser::returnStatement()
 {
-    TODO("Implement %s\n", __func__);
+    toks.eat(); // "return"
+
+    auto prev = ssa->size_stack();
+    expression();
+
+    if (ssa->size_stack() <= prev)
+        ssa->add_stack(-1);
+
+    ssa->add_instr(InstrType::RET);
 }
 
 /// END STATEMENTS ///
@@ -358,19 +510,19 @@ void Parser::expression()
         case TokenType::PLUS:
             toks.eat();
             term();
-            ssa.add_instr(InstrType::ADD);
+            ssa->add_instr(InstrType::ADD);
             break;
         case TokenType::MIN:
             toks.eat();
             term();
-            ssa.add_instr(InstrType::SUB);
+            ssa->add_instr(InstrType::SUB);
             break;
         default:
             loop = false;
             break;
         }
         if (loop)
-            ssa.add_stack(ssa.get_last_pos());
+            ssa->add_stack(ssa->get_last_pos());
     } while (loop);
 }
 
@@ -384,19 +536,19 @@ void Parser::term()
         case TokenType::MUL:
             toks.eat();
             factor();
-            ssa.add_instr(InstrType::MUL);
+            ssa->add_instr(InstrType::MUL);
             break;
         case TokenType::DIV:
             toks.eat();
             factor();
-            ssa.add_instr(InstrType::DIV);
+            ssa->add_instr(InstrType::DIV);
             break;
         default:
             loop = false;
             break;
         }
         if (loop)
-            ssa.add_stack(ssa.get_last_pos());
+            ssa->add_stack(ssa->get_last_pos());
     } while (loop);
 }
 
@@ -405,11 +557,11 @@ void Parser::factor()
 {
     switch (toks.get_type()) {
     case TokenType::ID:
-        ssa.resolve_symbol(toks.get());
+        ssa->resolve_symbol(toks.get(), functionMap);
         toks.eat();
         break;
     case TokenType::NUM:
-        ssa.add_const(*toks.get()->val());
+        ssa->add_const(*toks.get()->val());
         toks.eat();
         break;
     case TokenType::LPAREN: {
@@ -421,7 +573,11 @@ void Parser::factor()
             toks.eat();
     } break;
     case TokenType::CALL:
-        funcCall();
+        if (funcCall()) {
+            ERROR("Expected non-void function\n");
+            exit(1);
+        }
+        // ssa->add_stack(ssa->get_last_pos());
         break;
     default:
         break;
@@ -437,32 +593,32 @@ void Parser::relation()
     case TokenType::EQ: {
         toks.eat(); // eq
         expression();
-        ssa.add_instr(InstrType::BNE);
+        ssa->add_instr(InstrType::BNE);
     } break;
     case TokenType::NEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::BEQ);
+        ssa->add_instr(InstrType::BEQ);
         break;
     case TokenType::LT:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::BGE);
+        ssa->add_instr(InstrType::BGE);
         break;
     case TokenType::LTEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::BGT);
+        ssa->add_instr(InstrType::BGT);
         break;
     case TokenType::GT:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::BLE);
+        ssa->add_instr(InstrType::BLE);
         break;
     case TokenType::GTEQ:
         toks.eat();
         expression();
-        ssa.add_instr(InstrType::BLT);
+        ssa->add_instr(InstrType::BLT);
         break;
     default:
         SYN_EXPECTED("Relation");

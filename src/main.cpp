@@ -30,8 +30,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    auto& ir = p.get_ir();
-    ir.generate_dot();
+    p.generate_dot();
 
     return 0;
 }

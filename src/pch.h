@@ -1,11 +1,13 @@
 #include <cassert>
 #include <cinttypes>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <stack>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>

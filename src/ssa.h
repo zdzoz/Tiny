@@ -1,9 +1,6 @@
 #pragma once
 
-#include <stack>
-#ifndef NDEBUG
 #include <iostream>
-#endif
 
 #include "token.h"
 
@@ -13,7 +10,17 @@
 #define FUNC_OUTPUT_NL 2
 
 typedef std::pair<std::string, std::optional<u64>> SymbolType;
-typedef std::vector<SymbolType> SymbolTableType;
+// typedef std::vector<SymbolType> SymbolTableType;
+typedef std::map<u64, SymbolType> SymbolTableType;
+
+// token id -> jump pos, param count
+struct FunctionType {
+    u64 pos;
+    u64 paramCount;
+    bool isVoid; // true -> int, otherwise void
+};
+
+typedef std::unordered_map<u64, FunctionType> FunctionMap;
 
 enum class InstrType {
     CONST, // const #x define an SSA value for a constant
@@ -35,6 +42,12 @@ enum class InstrType {
     READ,
     WRITE,
     WRITENL,
+
+    // Functions
+    JUMP,
+    RET,
+    SETP,
+    GETP,
 
     END,
     NONE,
@@ -58,6 +71,10 @@ struct Instr {
         case InstrType::MUL:
         case InstrType::DIV:
             return true;
+        case InstrType::JUMP:
+        case InstrType::SETP:
+        case InstrType::GETP:
+        case InstrType::RET:
         case InstrType::PHI:
         case InstrType::CMP:
         case InstrType::BRA:
@@ -165,6 +182,19 @@ public:
     inline void set_current_block(std::shared_ptr<Block> b) { current = b; }
     inline std::shared_ptr<Block> get_current_block() { return current; }
 
+    // gets first instr of current block
+    inline u64 get_first_instr() const
+    {
+        assert(!current->empty());
+        return current->front().pos;
+    }
+
+    inline const Instr& get_last_instr() const
+    {
+        assert(!current->empty());
+        return current->back();
+    }
+
     void add_const(u64 val);
     void add_instr(InstrType type);
 
@@ -173,11 +203,10 @@ public:
     void set_symbol(const Token* t);
     void add_symbols_to_block(JoinNodeType& join_node);
 
-    bool resolve_symbol(const Token* t);
+    bool resolve_symbol(const Token* t, const FunctionMap& functionMap);
     void restore_symbol_state();
     void print_symbol_table();
 
-    inline void add_stack(u64 val) { instr_stack.push(val); }
     void resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to);
 
     void resolve_phi(std::unordered_map<u64, Instr*>& idToPhi);
@@ -191,11 +220,16 @@ public:
         return cmp;
     }
 
+    inline void add_stack(u64 val) { instr_stack.push(val); }
+    inline void pop_stack() { instr_stack.pop(); }
+    inline u64 size_stack() const { return instr_stack.size(); }
     inline void clear_stack() { instr_stack = {}; };
 
     void generate_dot() const;
 
     std::deque<JoinNodeType> join_stack;
+
+    std::string name = "main";
 
 private:
     SSA(SSA&) = delete;
@@ -204,7 +238,7 @@ private:
     std::stack<u64> instr_stack;
 
     // InputNum, OutputNum, OutputNewLine
-    SymbolTableType symbol_table = { { "read", std::nullopt }, { "write", std::nullopt }, { "writeNL", std::nullopt } };
+    SymbolTableType symbol_table = { { FUNC_INPUT_NUM, { "read", std::nullopt } }, { FUNC_OUTPUT_NUM, { "write", std::nullopt } }, { FUNC_OUTPUT_NL, { "writeNL", std::nullopt } } };
     const u64 inbuilt_count = symbol_table.size();
 
     std::unordered_map<Instr, u64> expressions;

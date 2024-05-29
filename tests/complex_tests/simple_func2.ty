@@ -1,0 +1,13 @@
+main
+
+var x;
+
+void function print(n);
+{
+    call OutputNum(n);
+};
+
+{
+    let x <- call InputNum;
+    call print(x)
+}.

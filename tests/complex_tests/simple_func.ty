@@ -2,7 +2,7 @@ main
 
 var x;
 
-void function printOne(); 
+void function printOne();
 var n;
 {
     let n <- 69;

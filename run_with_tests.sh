@@ -23,7 +23,13 @@ CWD=$(pwd)
 # FILE="tests/complex_tests/simple_func.ty"
 # FILE="tests/complex_tests/simple_func2.ty"
 # FILE="tests/complex_tests/add_func.ty"
-FILE="tests/complex_tests/fibonacci.ty"
+# FILE="tests/complex_tests/fibonacci.ty"
+# FILE="tests/complex_tests/nested_while.tiny"
+# FILE="tests/complex_tests/func_2x.ty"
+# FILE="tests/complex_tests/gcd.tiny"
+# FILE="tests/complex_tests/nested_if_while.tny"
+# FILE="tests/complex_tests/testComplexVoidCall.txt"
+FILE="tests/complex_tests/mandelbrot.tiny"
 
 if [ ! -f "$CWD/$FILE" ]; then
     echo "failed to find file: $FILE"

@@ -40,7 +40,7 @@ int Parser::parse()
     if (toks.get_type() == TokenType::VAR)
         varDecl();
 
-    if (toks.get_type() == TokenType::VOID || toks.get_type() == TokenType::FUNC)
+    while (toks.get_type() == TokenType::VOID || toks.get_type() == TokenType::FUNC)
         funcDecl();
 
     // "{"
@@ -131,6 +131,7 @@ void Parser::funcDecl()
 
     // swap to function ssa
     ssa = &s;
+    ssa->clear_stack();
 
     toks.eat(); // eat id
 
@@ -247,6 +248,7 @@ bool Parser::statement()
         break;
     case TokenType::RET:
         returnStatement();
+        ssa->clear_stack();
         return true;
         break;
     default:
@@ -303,7 +305,10 @@ bool Parser::funcCall()
         toks.eat(); // LPAREN
         do {
             expression();
-            args.push_back(ssa->get_last_pos());
+            if (ssa->size_stack() > 0) {
+                args.push_back(ssa->top_stack());
+                ssa->pop_stack();
+            }
             if (toks.get_type() == TokenType::COMMA) {
                 toks.eat(); // COMMA
                 if (toks.get_type() == TokenType::RPAREN) {
@@ -319,7 +324,7 @@ bool Parser::funcCall()
     if (functionMap.find(*val->val()) != functionMap.end()) {
         auto& [jmp_pos, paramCount, isVoid] = functionMap.at(*val->val());
         if (paramCount != args.size()) {
-            SYN_ERROR("Expected %llu arguments but only got %zu\n", paramCount, args.size());
+            SYN_ERROR("Expected %llu arguments but got %zu\n", paramCount, args.size());
             exit(1);
         }
 
@@ -329,16 +334,22 @@ bool Parser::funcCall()
             ssa->add_stack(++arg_num); // param num
             ssa->add_stack(e); // pos
             ssa->add_instr(InstrType::SETP);
-            ssa->pop_stack(); // remove option generated in arg loop
         }
 
         // jmp
         ssa->add_stack(jmp_pos);
         ssa->add_instr(InstrType::JUMP);
-        ssa->add_stack(ssa->get_last_pos());
+
+        // only add last_pos to stack if non void as should not be used as expression if void
+        if (!isVoid)
+            ssa->add_stack(ssa->get_last_pos());
+
         INFO("Function (%s) is %s\n", val->id().c_str(), (isVoid ? "void" : "non-void"));
         return isVoid;
-    } else {
+    } else { // inbuilt function
+        for (auto it = args.rbegin(); it != args.rend(); it++) {
+            ssa->add_stack(*it);
+        }
         return ssa->resolve_symbol(val, functionMap);
     }
 }
@@ -357,7 +368,7 @@ void Parser::ifStatement()
     JoinNodeType join = {};
     join.node = std::make_shared<Block>();
     join.isLeft = std::nullopt;
-    ssa->add_symbols_to_block(join); // FIX: adding nonexistent to symbol table?
+    ssa->add_symbols_to_block(join);
     ssa->join_stack.emplace_back(std::move(join));
 
     left->dominator = dominator;
@@ -404,14 +415,6 @@ void Parser::ifStatement()
     toks.eat(); // FI
 
     isBranchLeft = std::nullopt;
-    // add branch if to left if join_block has instructions
-    if (!join_block->empty()) {
-        auto current = ssa->get_current_block();
-        ssa->set_current_block(left);
-        ssa->add_stack(join_block->front().pos);
-        ssa->add_instr(InstrType::BRA);
-        ssa->set_current_block(current);
-    }
 
     // join
     join_block->parent_left = left;
@@ -423,6 +426,15 @@ void Parser::ifStatement()
 
     ssa->resolve_phi(idToPhi);
     ssa->commit_phi(idToPhi);
+
+    // add branch if to left if join_block has instructions
+    if (!join_block->empty()) {
+        auto current = ssa->get_current_block();
+        ssa->set_current_block(left);
+        ssa->add_stack(join_block->front().pos);
+        ssa->add_instr(InstrType::BRA);
+        ssa->set_current_block(current);
+    }
 
     ssa->resolve_branch(parent, original_right);
 
@@ -467,8 +479,6 @@ void Parser::whileStatement()
     statSequence();
     auto end_block = ssa->get_current_block();
     end_block->entry = join_block;
-    ssa->add_stack(join_block->front().pos);
-    ssa->add_instr(InstrType::BRA);
 
     if (toks.get_type() != TokenType::OD) {
         SYN_EXPECTED("OD");
@@ -478,6 +488,12 @@ void Parser::whileStatement()
 
     ssa->resolve_phi(ssa->join_stack.back().idToPhi);
     ssa->commit_phi(ssa->join_stack.back().idToPhi);
+
+    auto curr = ssa->get_current_block();
+    ssa->set_current_block(end_block);
+    ssa->add_stack(join_block->front().pos);
+    ssa->add_instr(InstrType::BRA);
+    ssa->set_current_block(curr);
 
     ssa->resolve_branch(join_block, exit_block);
 
@@ -521,8 +537,9 @@ void Parser::expression()
             loop = false;
             break;
         }
-        if (loop)
-            ssa->add_stack(ssa->get_last_pos());
+        // TODO: might not need
+        // if (loop)
+        //     ssa->add_stack(ssa->get_last_pos());
     } while (loop);
 }
 
@@ -547,8 +564,9 @@ void Parser::term()
             loop = false;
             break;
         }
-        if (loop)
-            ssa->add_stack(ssa->get_last_pos());
+        // TODO: might not need
+        // if (loop)
+        //     ssa->add_stack(ssa->get_last_pos());
     } while (loop);
 }
 
@@ -577,7 +595,6 @@ void Parser::factor()
             ERROR("Expected non-void function\n");
             exit(1);
         }
-        // ssa->add_stack(ssa->get_last_pos());
         break;
     default:
         break;

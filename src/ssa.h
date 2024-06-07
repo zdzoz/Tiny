@@ -60,7 +60,11 @@ struct Instr {
     std::optional<u64> x, y;
     bool operator==(const Instr& other) const
     {
-        return type == other.type && x == other.x && y == other.y;
+        if (type != other.type) return false;
+
+        if (x == other.x && y == other.y) return true;
+        if (x == other.y && y == other.x) return true;
+        return false;
     }
 
     inline bool isHashable() const
@@ -221,6 +225,7 @@ public:
     }
 
     inline void add_stack(u64 val) { instr_stack.push(val); }
+    inline u64 top_stack() const { return instr_stack.top(); }
     inline void pop_stack() { instr_stack.pop(); }
     inline u64 size_stack() const { return instr_stack.size(); }
     inline void clear_stack() { instr_stack = {}; };
@@ -242,6 +247,7 @@ private:
     const u64 inbuilt_count = symbol_table.size();
 
     std::unordered_map<Instr, u64> expressions;
+    std::unordered_map<u64, u64> constants;
 
     void add_to_block(Instr instr);
     Instr& add_to_block(Instr&& instr, std::shared_ptr<Block>& b);

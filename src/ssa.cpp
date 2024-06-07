@@ -1,6 +1,7 @@
 #include "ssa.h"
 #include "token.h"
 
+#include <algorithm>
 #include <ostream>
 
 u64 Block::__id = 0;
@@ -37,10 +38,9 @@ std::shared_ptr<Block> SSA::add_block(bool isLeft)
 
 void SSA::add_const(u64 val)
 {
-    static std::unordered_map<u64, u64> val_to_pos;
-    if (val_to_pos.find(val) != val_to_pos.end()) {
-        // last_instr_pos = val_to_pos[val];
-        add_stack(val_to_pos[val]);
+    if (constants.find(val) != constants.end()) {
+        last_instr_pos = constants[val];
+        add_stack(constants[val]);
         return;
     }
 
@@ -49,10 +49,10 @@ void SSA::add_const(u64 val)
     instr.x = val;
     instr.pos = instruction_num++;
     last_instr_pos = instr.pos;
-    val_to_pos[val] = instr.pos;
+    constants[val] = instr.pos;
 
     blocks->add_back(std::move(instr));
-    add_stack(val_to_pos[val]);
+    add_stack(constants[val]);
 }
 
 static bool isBranch(InstrType type)
@@ -76,6 +76,7 @@ void SSA::add_instr(InstrType type)
     Instr __instr;
     Instr* instr = &__instr;
     bool none = false;
+    bool add_to_stack = false;
     if (!isBranch(type) && !get_current_block()->empty() && get_current_block()->back().type == InstrType::NONE) {
         instr = &get_current_block()->back();
         none = true;
@@ -90,8 +91,9 @@ void SSA::add_instr(InstrType type)
     case InstrType::BGT: // bgt x y branch to y on x greater
     case InstrType::BGE: { // bge x y branch to y on x greater or equal
         add_instr(InstrType::CMP);
-        assert(instr_stack.size() == 0);
-        instr->x = get_last_pos();
+        assert(instr_stack.size() == 1);
+        instr->x = instr_stack.top();
+        instr_stack.pop();
     } break;
     case InstrType::CMP: // cmp x y comparison
     case InstrType::ADD: // add x y addition
@@ -103,8 +105,10 @@ void SSA::add_instr(InstrType type)
         instr_stack.pop();
         instr->x = instr_stack.top();
         instr_stack.pop();
+        add_to_stack = true;
     } break;
     case InstrType::READ: // no opts
+        add_to_stack = true;
         break;
     case InstrType::WRITE: {
         assert(instr_stack.size() >= 1 && "Not enough options");
@@ -148,6 +152,8 @@ void SSA::add_instr(InstrType type)
 
     if (instr->isHashable() && expressions.find(*instr) != expressions.end()) {
         last_instr_pos = expressions[*instr];
+        if (add_to_stack)
+            add_stack(get_last_pos());
         instr->type = InstrType::NONE;
         return;
     }
@@ -160,6 +166,9 @@ void SSA::add_instr(InstrType type)
 
     if (instr->isHashable())
         expressions[*instr] = get_last_pos();
+
+    if (add_to_stack)
+        add_stack(get_last_pos());
 }
 
 void SSA::add_to_block(Instr instr)
@@ -199,32 +208,34 @@ void SSA::set_symbol(const Token* t)
             phi = idToPhi[*t->val()];
         } else {
             // TODO: probably can remove this else
+            std::cerr << "FAILED!!!!!! ----\n";
             PRTOKLN(*t);
+            std::cerr << "FAILED!!!!!! ----\n";
             print_symbol_table();
             std::cout << *this;
             throw std::runtime_error("unreachable " + std::string(__func__));
-            auto v = symbol_table[*t->val()].second.value_or(pos);
-            Instr p = {};
-            p.type = InstrType::PHI;
-            p.x = v;
-            p.y = v;
-            idToPhi[*t->val()] = &add_to_block(std::move(p), join_block);
-            phi = idToPhi[*t->val()];
-
-            if (whileInfo.has_value()) {
-                // resolve backwards
-                auto& curr = get_current_block()->instructions;
-                for (auto it = curr.rbegin(); it != curr.rend(); it++) {
-                    if ((*it).x == v)
-                        (*it).x = phi->pos;
-                    if ((*it).y == v)
-                        (*it).y = phi->pos;
-                }
-                if (whileInfo.value()->x == v)
-                    whileInfo.value()->x = phi->pos;
-                if (whileInfo.value()->y == v)
-                    whileInfo.value()->y = phi->pos;
-            }
+            // auto v = symbol_table[*t->val()].second.value_or(pos);
+            // Instr p = {};
+            // p.type = InstrType::PHI;
+            // p.x = v;
+            // p.y = v;
+            // idToPhi[*t->val()] = &add_to_block(std::move(p), join_block);
+            // phi = idToPhi[*t->val()];
+            //
+            // if (whileInfo.has_value()) {
+            //     // resolve backwards
+            //     auto& curr = get_current_block()->instructions;
+            //     for (auto it = curr.rbegin(); it != curr.rend(); it++) {
+            //         if ((*it).x == v)
+            //             (*it).x = phi->pos;
+            //         if ((*it).y == v)
+            //             (*it).y = phi->pos;
+            //     }
+            //     if (whileInfo.value()->x == v)
+            //         whileInfo.value()->x = phi->pos;
+            //     if (whileInfo.value()->y == v)
+            //         whileInfo.value()->y = phi->pos;
+            // }
         }
         if (*isBranchLeft)
             phi->x = pos;
@@ -240,17 +251,27 @@ void SSA::set_symbol(const Token* t)
 
 void SSA::add_symbols_to_block(JoinNodeType& join_node)
 {
-    for (u64 i = inbuilt_count; i < symbol_table.size(); ++i) {
-        if (symbol_table.find(i) == symbol_table.end())
+    for (auto& [k, s] : symbol_table) {
+        if (k < inbuilt_count)
             continue;
-        auto& s = symbol_table[i];
 
         Instr p = {};
         p.type = InstrType::PHI;
         p.x = s.second;
         p.y = p.x;
-        join_node.idToPhi[i] = &add_to_block(std::move(p), join_node.node);
+        join_node.idToPhi[k] = &add_to_block(std::move(p), join_node.node);
     }
+    // for (u64 i = inbuilt_count; i < symbol_table.size(); ++i) {
+    //     if (symbol_table.find(i) == symbol_table.end())
+    //         continue;
+    //     auto& s = symbol_table[i];
+    //
+    //     Instr p = {};
+    //     p.type = InstrType::PHI;
+    //     p.x = s.second;
+    //     p.y = p.x;
+    //     join_node.idToPhi[i] = &add_to_block(std::move(p), join_node.node);
+    // }
 }
 
 // resolves symbol and adds to option stack
@@ -266,28 +287,27 @@ bool SSA::resolve_symbol(const Token* t, const FunctionMap& functionMap)
     switch (*t->val()) {
     case FUNC_INPUT_NUM: // no opt
         add_instr(InstrType::READ);
-        add_stack(get_last_pos());
         return false; // is not void
     case FUNC_OUTPUT_NUM: // has opt
         add_instr(InstrType::WRITE);
-        add_stack(get_last_pos());
         return true;
     case FUNC_OUTPUT_NL: // no opt
         add_instr(InstrType::WRITENL);
-        add_stack(get_last_pos());
         return true;
     default:
         auto& [_, val] = symbol_table[*t->val()];
         if (val.has_value()) {
             opt = val.value();
         } else {
-            add_const(0);
-            val = 0;
             WARN("uninitialized symbol '%s'\n", t->id().c_str());
-            opt = 0;
+            add_const(0);
+            val = instr_stack.top();
+            opt = val.value();
+            pop_stack();
         }
     }
     add_stack(opt);
+    last_instr_pos = opt;
     return true;
 }
 
@@ -320,11 +340,12 @@ void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
 void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
 {
     std::vector<u64> erase_queue;
-    std::vector<std::deque<Instr>::iterator> erase_queue2;
+    std::vector<u64> erase_queue2;
 
     std::function<void(Block*, u64, u64)> propagate_changes = [&](Block* start, u64 from, u64 to) {
+        u64 idx = 0;
+        std::vector<u64> eq;
         for (auto it = start->instructions.begin(); it != start->instructions.end(); ++it) {
-            // for (auto& instr : start->instructions) {
             auto& instr = *it;
             if (instr.pos == from)
                 continue;
@@ -337,10 +358,15 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
                 }
                 if (instr.isHashable() && expressions.find(instr) != expressions.end()) {
                     propagate_changes(blocks.get(), instr.pos, expressions[instr]);
-                    start->instructions.erase(it);
+                    eq.push_back(idx);
                 }
             }
+            idx++;
         }
+
+        std::sort(eq.begin(), eq.end(), std::greater<u64>());
+        for (auto& e : eq)
+            start->instructions.erase(start->instructions.begin() + e);
 
         if (start->left) {
             propagate_changes(start->left.get(), from, to);
@@ -360,16 +386,21 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
 
         if (phi->x == phi->y) {
             auto& instrs = join_stack.back().node->instructions;
-            propagate_changes(join_stack.back().node.get(), phi->pos, phi->x.value());
-            symbol_table[id].second = phi->x; // update symbol table
+            if (phi->x.has_value()) {
+                propagate_changes(join_stack.back().node.get(), phi->pos, phi->x.value());
+                symbol_table[id].second = phi->x; // update symbol table
+            }
             erase_queue.emplace_back(id);
+
             // remove instruction from block
-            for (auto it = instrs.begin(); it != instrs.end(); ++it) {
-                if (phi->pos == it->pos) {
+            u64 it = 0;
+            for (auto& instr : instrs) {
+                if (phi->pos == instr.pos) {
                     INFO("ERASING %s == %llu\n", symbol_table[id].first.c_str(), phi->pos);
                     erase_queue2.push_back(it);
                     break;
                 }
+                it++;
             }
         }
     }
@@ -381,14 +412,26 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
         auto& outer = join_stack[join_stack.size() - 2];
         for (auto& i : idToPhi) {
             if (outer.idToPhi.find(i.first) != outer.idToPhi.end()) {
-                INFO("Setting %llu to %llu\n", outer.idToPhi[i.first]->y.value(), i.second->pos);
+                if (outer.idToPhi[i.first]->y)
+                    INFO("Setting %llu to %llu\n", outer.idToPhi[i.first]->y.value(), i.second->pos);
                 outer.idToPhi[i.first]->y = i.second->pos;
             }
         }
     }
 
+    std::sort(erase_queue2.begin(), erase_queue2.end(), std::greater<u64>()); // sort descending
+
+    auto& back = join_stack.back().node->instructions;
     for (auto& e : erase_queue2)
-        join_stack.back().node->instructions.erase(e);
+        back.erase(back.begin() + e);
+
+    if (join_stack.back().node->instructions.empty()) {
+        auto current = get_current_block();
+        set_current_block(join_stack.back().node);
+        add_instr(InstrType::NONE);
+        set_current_block(current);
+    }
+    assert(!join_stack.back().node->instructions.empty());
 }
 
 /// DOT GENERATION ///

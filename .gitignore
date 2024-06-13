@@ -4,3 +4,4 @@ build
 .idea
 cmake-build-debug
 2024-cs142b
+tests/final

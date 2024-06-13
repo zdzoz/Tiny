@@ -205,16 +205,16 @@ public:
     // void add_symbols(u64 count);
     void add_symbols(SymbolTableType&& v);
     void set_symbol(const Token* t);
-    void add_symbols_to_block(JoinNodeType& join_node);
+    std::vector<std::pair<u64, u64>> add_symbols_to_block(JoinNodeType& join_node);
 
-    bool resolve_symbol(const Token* t, const FunctionMap& functionMap);
-    void restore_symbol_state();
+    bool resolve_symbol(const Token* t);
+    void restore_symbol_state(std::vector<std::pair<u64, u64>>& old_symbols);
     void print_symbol_table();
 
     void resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& to);
 
-    void resolve_phi(std::unordered_map<u64, Instr*>& idToPhi);
-    void commit_phi(std::unordered_map<u64, Instr*>& idToPhi);
+    std::vector<std::pair<u64, u64>> resolve_phi(std::unordered_map<u64, Instr*>& idToPhi);
+    void commit_phi(std::unordered_map<u64, Instr*>& idToPhi, bool isIf = false);
 
     inline u64 get_last_pos() const { return last_instr_pos; }
     inline Instr* get_cmp()

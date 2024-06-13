@@ -207,41 +207,18 @@ void SSA::set_symbol(const Token* t)
         if (idToPhi.find(*t->val()) != idToPhi.end()) {
             phi = idToPhi[*t->val()];
         } else {
-            // TODO: probably can remove this else
-            std::cerr << "FAILED!!!!!! ----\n";
+            // NOTE: should never reach
             PRTOKLN(*t);
-            std::cerr << "FAILED!!!!!! ----\n";
             print_symbol_table();
             std::cout << *this;
             throw std::runtime_error("unreachable " + std::string(__func__));
-            // auto v = symbol_table[*t->val()].second.value_or(pos);
-            // Instr p = {};
-            // p.type = InstrType::PHI;
-            // p.x = v;
-            // p.y = v;
-            // idToPhi[*t->val()] = &add_to_block(std::move(p), join_block);
-            // phi = idToPhi[*t->val()];
-            //
-            // if (whileInfo.has_value()) {
-            //     // resolve backwards
-            //     auto& curr = get_current_block()->instructions;
-            //     for (auto it = curr.rbegin(); it != curr.rend(); it++) {
-            //         if ((*it).x == v)
-            //             (*it).x = phi->pos;
-            //         if ((*it).y == v)
-            //             (*it).y = phi->pos;
-            //     }
-            //     if (whileInfo.value()->x == v)
-            //         whileInfo.value()->x = phi->pos;
-            //     if (whileInfo.value()->y == v)
-            //         whileInfo.value()->y = phi->pos;
-            // }
         }
         if (*isBranchLeft)
             phi->x = pos;
         else {
-            if (!phi->x.has_value())
+            if (!phi->x.has_value()) {
                 phi->x = pos;
+            }
             phi->y = pos;
         }
     }
@@ -249,34 +226,27 @@ void SSA::set_symbol(const Token* t)
     symbol_table[*t->val()].second = pos;
 }
 
-void SSA::add_symbols_to_block(JoinNodeType& join_node)
+std::vector<std::pair<u64, u64>> SSA::add_symbols_to_block(JoinNodeType& join_node)
 {
+    std::vector<std::pair<u64, u64>> old_symbols;
     for (auto& [k, s] : symbol_table) {
         if (k < inbuilt_count)
             continue;
 
+        if (s.second.has_value())
+            old_symbols.emplace_back(std::make_pair(k, *s.second));
         Instr p = {};
         p.type = InstrType::PHI;
         p.x = s.second;
         p.y = p.x;
         join_node.idToPhi[k] = &add_to_block(std::move(p), join_node.node);
     }
-    // for (u64 i = inbuilt_count; i < symbol_table.size(); ++i) {
-    //     if (symbol_table.find(i) == symbol_table.end())
-    //         continue;
-    //     auto& s = symbol_table[i];
-    //
-    //     Instr p = {};
-    //     p.type = InstrType::PHI;
-    //     p.x = s.second;
-    //     p.y = p.x;
-    //     join_node.idToPhi[i] = &add_to_block(std::move(p), join_node.node);
-    // }
+    return old_symbols;
 }
 
 // resolves symbol and adds to option stack
 // for functions returns true if isVoid
-bool SSA::resolve_symbol(const Token* t, const FunctionMap& functionMap)
+bool SSA::resolve_symbol(const Token* t)
 {
     if (symbol_table.find(*t->val()) == symbol_table.end()) {
         LOG_ERROR("[ERROR] Unknown symbol '%s'\n", t->id().c_str());
@@ -311,12 +281,13 @@ bool SSA::resolve_symbol(const Token* t, const FunctionMap& functionMap)
     return true;
 }
 
-void SSA::restore_symbol_state()
+void SSA::restore_symbol_state(std::vector<std::pair<u64, u64>>& old_symbols)
 {
-    assert(!join_stack.empty());
-    auto& idToPhi = join_stack.back().idToPhi;
-    for (auto& [id, phi] : idToPhi) {
-        symbol_table[id].second = phi->y;
+    for (auto& [k, v] : old_symbols) {
+        if (symbol_table.find(k) == symbol_table.end()) {
+            throw std::runtime_error("Failed to find symbol");
+        }
+        symbol_table[k].second = v;
     }
 }
 
@@ -328,16 +299,19 @@ void SSA::resolve_branch(std::shared_ptr<Block>& from, std::shared_ptr<Block>& t
     p.back().y = instr_pos;
 }
 
-void SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
+std::vector<std::pair<u64, u64>> SSA::resolve_phi(std::unordered_map<u64, Instr*>& idToPhi)
 {
+    std::vector<std::pair<u64, u64>> old_symbols;
     for (auto& [id, phi] : idToPhi) {
         INFO("Resolving phi of %s = %llu\n", symbol_table[id].first.c_str(), phi->pos);
         symbol_table[id].second = phi->pos;
+        old_symbols.emplace_back(id, phi->pos);
     }
+    return old_symbols;
 }
 
 // if phi.x == phi.y should resolve to phi.x and phi.x should be propogated until left and right nullptr update outer too
-void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
+void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi, bool isIf)
 {
     std::vector<u64> erase_queue;
     std::vector<u64> erase_queue2;
@@ -390,9 +364,10 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
                 propagate_changes(join_stack.back().node.get(), phi->pos, phi->x.value());
                 symbol_table[id].second = phi->x; // update symbol table
             }
-            erase_queue.emplace_back(id);
 
             // remove instruction from block
+            if (!isIf)
+                erase_queue.emplace_back(id);
             u64 it = 0;
             for (auto& instr : instrs) {
                 if (phi->pos == instr.pos) {
@@ -414,7 +389,16 @@ void SSA::commit_phi(std::unordered_map<u64, Instr*>& idToPhi)
             if (outer.idToPhi.find(i.first) != outer.idToPhi.end()) {
                 if (outer.idToPhi[i.first]->y)
                     INFO("Setting %llu to %llu\n", outer.idToPhi[i.first]->y.value(), i.second->pos);
-                outer.idToPhi[i.first]->y = i.second->pos;
+                auto& toUpdate = outer.idToPhi[i.first];
+                auto updatedVal = i.second->pos;
+                if (isIf && i.second->x == i.second->y) {
+                    updatedVal = i.second->x.value_or(updatedVal);
+                }
+                if (toUpdate->x == toUpdate->y) {
+                    toUpdate->x = updatedVal;
+                } else {
+                    toUpdate->y = updatedVal;
+                }
             }
         }
     }

@@ -350,7 +350,7 @@ bool Parser::funcCall()
         for (auto it = args.rbegin(); it != args.rend(); it++) {
             ssa->add_stack(*it);
         }
-        return ssa->resolve_symbol(val, functionMap);
+        return ssa->resolve_symbol(val);
     }
 }
 
@@ -368,7 +368,7 @@ void Parser::ifStatement()
     JoinNodeType join = {};
     join.node = std::make_shared<Block>();
     join.isLeft = std::nullopt;
-    ssa->add_symbols_to_block(join);
+    auto old_symbols = ssa->add_symbols_to_block(join);
     ssa->join_stack.emplace_back(std::move(join));
 
     left->dominator = dominator;
@@ -399,7 +399,7 @@ void Parser::ifStatement()
     ssa->add_instr(InstrType::NONE);
     if (toks.get_type() == TokenType::ELSE) {
         toks.eat(); // else
-        ssa->restore_symbol_state();
+        ssa->restore_symbol_state(old_symbols);
         INFO("[%s] entering right statSequence\n", __func__);
         statSequence();
         INFO("[%s] exiting right statSequence\n", __func__);
@@ -425,7 +425,7 @@ void Parser::ifStatement()
     ssa->set_current_block(join_block);
 
     ssa->resolve_phi(idToPhi);
-    ssa->commit_phi(idToPhi);
+    ssa->commit_phi(idToPhi, true);
 
     // add branch if to left if join_block has instructions
     if (!join_block->empty()) {
@@ -575,7 +575,7 @@ void Parser::factor()
 {
     switch (toks.get_type()) {
     case TokenType::ID:
-        ssa->resolve_symbol(toks.get(), functionMap);
+        ssa->resolve_symbol(toks.get());
         toks.eat();
         break;
     case TokenType::NUM:

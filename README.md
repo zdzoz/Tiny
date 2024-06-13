@@ -1,9 +1,9 @@
 # Tiny Language Compiler
 
 > [!NOTE]
-> Tested on:
-> macOS Sonoma 14.5
-> Apple clang version 15.0.0 (clang-1500.3.9.4)
+> Tested on: <br>
+> macOS Sonoma 14.5 <br>
+> Apple clang version 15.0.0 (clang-1500.3.9.4) <br>
 > Target: arm64-apple-darwin23.5.0
 
 ### Build
